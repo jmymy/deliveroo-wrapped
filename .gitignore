@@ -1,0 +1,11 @@
+# Compiled binary
+/server
+
+# Local data + secrets (auth tokens, captured headers, synced orders)
+/.deliveroostats/
+
+# Captured API samples (may contain tokens / personal data) — never commit
+/docs/api-samples/
+
+# macOS
+.DS_Store

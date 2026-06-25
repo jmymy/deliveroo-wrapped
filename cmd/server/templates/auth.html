@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Connect — Deliveroo Wrapped</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">Deliveroo <span>Wrapped</span></div>
+    <div><a href="/">Dashboard</a></div>
+  </div>
+
+  <div class="wrap">
+    <div class="hero">
+      <h1>Connect your Deliveroo account</h1>
+      <p>Deliveroo has no public API, so we replay a request captured from the iOS app. Nothing leaves your machine.</p>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0">Paste a captured request</h2>
+      <ol class="hint" style="font-size:14px; line-height:1.7">
+        <li>In Charles, enable <strong>SSL Proxying</strong> for <code>*.deliveroo.com</code> and trust the Charles cert on your iPhone (full trust in Certificate Trust Settings).</li>
+        <li>Point the iPhone's Wi-Fi HTTP proxy at your Mac (port 8888), open Deliveroo, and view your <strong>Order history</strong>.</li>
+        <li>Right-click the order-history request → <strong>Copy cURL Request</strong>, and paste it below.</li>
+      </ol>
+
+      <form hx-post="/api/manual-auth" hx-target="#auth-result" hx-swap="innerHTML">
+        <label for="curl">Copy-as-cURL (or a raw <code>Key: Value</code> header block)</label>
+        <textarea id="curl" name="curl" rows="10" placeholder="curl 'https://api.deliveroo.com/consumer/v2/orders' \
+  -H 'Authorization: Bearer eyJ...' \
+  -H 'User-Agent: Deliveroo/3.123.0 (iPhone; iOS 17.5; Scale/3.00)' \
+  -H 'x-roo-...: ...'"></textarea>
+        <p class="hint">We pull out the <code>Authorization</code> token and keep every other header verbatim so requests match the real app.</p>
+
+        <label for="token">Refresh token only (optional)</label>
+        <input type="text" id="token" name="token" placeholder="Bearer eyJ... — paste a fresh token later without re-pasting headers">
+
+        <label for="user_name">Your name (optional, for the dashboard)</label>
+        <input type="text" id="user_name" name="user_name" placeholder="e.g. Jonathan">
+
+        <div style="margin-top:20px">
+          <button class="btn" type="submit">Connect & save</button>
+        </div>
+      </form>
+      <div id="auth-result"></div>
+    </div>
+  </div>
+</body>
+</html>
