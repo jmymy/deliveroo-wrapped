@@ -461,17 +461,21 @@ func (s *Server) buildPageCtx(r *http.Request) pageCtx {
 
 // viewModel is the JSON injected for the explore charts + map.
 type viewModel struct {
-	SpendByMonth [12]float64           `json:"spendByMonth"`
-	OrdersByDow  [7]int                `json:"ordersByDow"`  // Mon..Sun
-	OrdersByHour [24]int               `json:"ordersByHour"` // 0..23
-	ValueBuckets []models.ValueBucket  `json:"valueBuckets"`
-	Destinations []models.AddressEntry `json:"destinations"`
+	SpendByMonth    [12]float64           `json:"spendByMonth"`
+	DeliveryByMonth [12]float64           `json:"deliveryByMonth"`
+	ServiceByMonth  [12]float64           `json:"serviceByMonth"`
+	OrdersByDow     [7]int                `json:"ordersByDow"`  // Mon..Sun
+	OrdersByHour    [24]int               `json:"ordersByHour"` // 0..23
+	ValueBuckets    []models.ValueBucket  `json:"valueBuckets"`
+	Destinations    []models.AddressEntry `json:"destinations"`
 }
 
 func buildViewModel(st *models.YearlyStats) viewModel {
 	var vm viewModel
 	for m := 1; m <= 12; m++ {
 		vm.SpendByMonth[m-1] = st.SpendByMonth[m]
+		vm.DeliveryByMonth[m-1] = st.DeliveryFeesByMonth[m]
+		vm.ServiceByMonth[m-1] = st.ServiceFeesByMonth[m]
 	}
 	// stats uses 0=Sunday..6=Saturday; the chart wants Mon..Sun.
 	order := []int{1, 2, 3, 4, 5, 6, 0}

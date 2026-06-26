@@ -320,15 +320,17 @@ type YearlyStats struct {
 	OrderValueBuckets []ValueBucket `json:"order_value_buckets"`
 
 	// Patterns
-	OrdersByMonth     map[int]int     `json:"orders_by_month"`
-	SpendByMonth      map[int]float64 `json:"spend_by_month"`
-	OrdersByDayOfWeek map[int]int     `json:"orders_by_day_of_week"`
-	OrdersByHour      map[int]int     `json:"orders_by_hour"`
-	WeekdayOrders     int             `json:"weekday_orders"`
-	WeekendOrders     int             `json:"weekend_orders"`
-	LateNightOrders   int             `json:"late_night_orders"`
-	BusiestMonth      int             `json:"busiest_month"`
-	PeakHour          int             `json:"peak_hour"` // hour 0-23 with the most orders
+	OrdersByMonth       map[int]int     `json:"orders_by_month"`
+	SpendByMonth        map[int]float64 `json:"spend_by_month"`
+	DeliveryFeesByMonth map[int]float64 `json:"delivery_fees_by_month"`
+	ServiceFeesByMonth  map[int]float64 `json:"service_fees_by_month"`
+	OrdersByDayOfWeek   map[int]int     `json:"orders_by_day_of_week"`
+	OrdersByHour        map[int]int     `json:"orders_by_hour"`
+	WeekdayOrders       int             `json:"weekday_orders"`
+	WeekendOrders       int             `json:"weekend_orders"`
+	LateNightOrders     int             `json:"late_night_orders"`
+	BusiestMonth        int             `json:"busiest_month"`
+	PeakHour            int             `json:"peak_hour"` // hour 0-23 with the most orders
 
 	// Delivery vs estimate ("Deliveroo beats its own ETA")
 	EtaSampleCount    int     `json:"eta_sample_count"`
