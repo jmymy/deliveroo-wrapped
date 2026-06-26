@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	_ "time/tzdata" // embed the zoneinfo DB so models.OrderLocation always loads
 
 	"deliveroo-wrapped/internal/deliveroo"
 	"deliveroo-wrapped/internal/models"

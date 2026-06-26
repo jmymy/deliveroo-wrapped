@@ -49,7 +49,7 @@
         <span class="unit">times</span>
       </h2>
       <p class="lede reveal d2" style="margin-top:18px">
-        That's <b>{{formatFloat (divf (toF .Stats.TotalOrders) 52.0) 1}}</b> a week. You spent
+        That's <b>{{formatFloat .Stats.AvgOrdersPerWeek 1}}</b> a week. You spent
         <b class="num" data-count="{{printf "%.0f" .Stats.TotalSpent}}" data-prefix="£">£0</b>
         across <b class="num" data-count="{{.Stats.UniqueRestaurants}}">0</b> different kitchens —
         averaging <b>{{formatMoney .Stats.AvgOrderTotal $cur}}</b> a go.
@@ -105,10 +105,12 @@
         We beat our own ETA <b class="num" data-count="{{printf "%.0f" .Stats.EtaBeatenPct}}" data-suffix="%">0%</b> of the time —
         about <b>{{formatFloat (absf .Stats.AvgVsEtaMinutes) 0}} min</b> {{if gt .Stats.AvgVsEtaMinutes 0.0}}late{{else}}early{{end}} on average.
       </p>
+      {{if gt .Stats.DeliverySampleCount 0}}
       <div class="chip-row reveal d3" style="margin-top:24px">
         <span class="chip" style="background:rgba(255,255,255,.18);color:#fff">⚡ Fastest <b style="color:#fff">{{printf "%.0f" .Stats.ShortestDeliveryMinutes}} min</b> · {{.Stats.ShortestDeliveryRestaurant}}</span>
         <span class="chip" style="background:rgba(255,255,255,.18);color:#fff">🐌 Longest <b style="color:#fff">{{printf "%.0f" .Stats.LongestDeliveryMinutes}} min</b> · {{.Stats.LongestDeliveryRestaurant}}</span>
       </div>
+      {{end}}
     </div>
     <div class="scene-hint"><span class="chev">↓</span></div>
   </section>

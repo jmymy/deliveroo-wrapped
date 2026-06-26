@@ -61,16 +61,27 @@ func Calculate(orders []models.StoredOrder, year int, plusMonthlyCost float64) *
 	var etaSumDiff, worstLate, earliest float64
 	st.ShortestDeliveryMinutes = -1
 	valueCounts := make([]int, len(orderValueBands))
+	loc := models.OrderLocation()
+	var firstDate, lastDate time.Time
 
 	for _, o := range orders {
-		if year != 0 && o.PlacedAt.Year() != year {
+		// Bucket by the order's local market time, not the stored UTC instant,
+		// so near-midnight orders land on the right day / hour / year.
+		pt := o.PlacedAt.In(loc)
+		if year != 0 && pt.Year() != year {
 			continue
 		}
-		if o.PlacedAt.IsZero() || o.Status == "CANCELED" {
+		if o.PlacedAt.IsZero() || !models.CountsTowardStats(o.Status) {
 			continue
 		}
 
 		st.TotalOrders++
+		if firstDate.IsZero() || pt.Before(firstDate) {
+			firstDate = pt
+		}
+		if pt.After(lastDate) {
+			lastDate = pt
+		}
 
 		if st.Currency == "" && o.Currency != "" {
 			st.Currency = o.Currency
@@ -94,14 +105,14 @@ func Calculate(orders []models.StoredOrder, year int, plusMonthlyCost float64) *
 		st.PlusServiceSaved += o.PlusServiceFeeSaved
 		st.TotalPlusSavings += o.PlusSaved()
 
-		// Patterns
-		month := int(o.PlacedAt.Month())
+		// Patterns (bucketed in local market time, see pt above)
+		month := int(pt.Month())
 		st.OrdersByMonth[month]++
 		st.SpendByMonth[month] += o.Total
-		st.OrdersByDayOfWeek[int(o.PlacedAt.Weekday())]++
-		hour := o.PlacedAt.Hour()
+		st.OrdersByDayOfWeek[int(pt.Weekday())]++
+		hour := pt.Hour()
 		st.OrdersByHour[hour]++
-		if o.PlacedAt.Weekday() == time.Saturday || o.PlacedAt.Weekday() == time.Sunday {
+		if pt.Weekday() == time.Saturday || pt.Weekday() == time.Sunday {
 			st.WeekendOrders++
 		} else {
 			st.WeekdayOrders++
@@ -109,8 +120,8 @@ func Calculate(orders []models.StoredOrder, year int, plusMonthlyCost float64) *
 		if hour >= 21 || hour < 4 {
 			st.LateNightOrders++
 		}
-		months[o.PlacedAt.Format("2006-01")] = true
-		ordersByDate[o.PlacedAt.Format("2006-01-02")]++
+		months[pt.Format("2006-01")] = true
+		ordersByDate[pt.Format("2006-01-02")]++
 
 		// Cuisine
 		if o.Cuisine != "" {
@@ -205,10 +216,18 @@ func Calculate(orders []models.StoredOrder, year int, plusMonthlyCost float64) *
 	if st.TotalOrders > 0 {
 		st.AvgOrderTotal = st.TotalSpent / float64(st.TotalOrders)
 		st.TippedOrderPct = float64(st.TippedOrderCount) / float64(st.TotalOrders) * 100
+		// Orders per week over the actual active span (first→last order), not a
+		// hardcoded 52 — so partial years (e.g. the current one) aren't deflated.
+		weeks := lastDate.Sub(firstDate).Hours() / 24 / 7
+		if weeks < 1 {
+			weeks = 1
+		}
+		st.AvgOrdersPerWeek = float64(st.TotalOrders) / weeks
 	}
 	if st.TippedOrderCount > 0 {
 		st.AvgTip = st.TotalTips / float64(st.TippedOrderCount)
 	}
+	st.DeliverySampleCount = deliveryCount
 	if deliveryCount > 0 {
 		st.AvgDeliveryMinutes = float64(totalDeliverySec) / float64(deliveryCount) / 60.0
 	}
@@ -237,14 +256,12 @@ func Calculate(orders []models.StoredOrder, year int, plusMonthlyCost float64) *
 		}
 	}
 
-	// Busiest month
+	// Busiest month (stays 0 when there are no orders; the template guards on
+	// TotalOrders and shows "—" rather than a misleading default of January).
 	for m := 1; m <= 12; m++ {
 		if st.OrdersByMonth[m] > st.OrdersByMonth[st.BusiestMonth] {
 			st.BusiestMonth = m
 		}
-	}
-	if st.BusiestMonth == 0 {
-		st.BusiestMonth = 1
 	}
 
 	// Peak hour
@@ -297,10 +314,10 @@ func Calculate(orders []models.StoredOrder, year int, plusMonthlyCost float64) *
 func CalculateRestaurantStats(orders []models.StoredOrder, year int) ([]models.RestaurantLeaderboardEntry, int) {
 	agg := make(map[string]*models.RestaurantLeaderboardEntry)
 	for _, o := range orders {
-		if year != 0 && o.PlacedAt.Year() != year {
+		if year != 0 && o.PlacedAt.In(models.OrderLocation()).Year() != year {
 			continue
 		}
-		if o.PlacedAt.IsZero() || o.Status == "CANCELED" || o.RestaurantName == "" {
+		if o.PlacedAt.IsZero() || !models.CountsTowardStats(o.Status) || o.RestaurantName == "" {
 			continue
 		}
 		e, ok := agg[o.RestaurantName]
@@ -355,10 +372,10 @@ func CalculateAddressStats(orders []models.StoredOrder, year int) []models.Addre
 	}
 	agg := make(map[string]*acc)
 	for _, o := range orders {
-		if year != 0 && o.PlacedAt.Year() != year {
+		if year != 0 && o.PlacedAt.In(models.OrderLocation()).Year() != year {
 			continue
 		}
-		if o.PlacedAt.IsZero() || o.Status == "CANCELED" || o.DeliveryAddressLabel == "" {
+		if o.PlacedAt.IsZero() || !models.CountsTowardStats(o.Status) || o.DeliveryAddressLabel == "" {
 			continue
 		}
 		a := agg[o.DeliveryAddressLabel]
@@ -407,10 +424,10 @@ func CalculateDriverStats(orders []models.StoredOrder, year int) (available bool
 	agg := make(map[string]*models.DriverLeaderboardEntry)
 	seen := make(map[string]bool)
 	for _, o := range orders {
-		if year != 0 && o.PlacedAt.Year() != year {
+		if year != 0 && o.PlacedAt.In(models.OrderLocation()).Year() != year {
 			continue
 		}
-		if o.Status == "CANCELED" {
+		if !models.CountsTowardStats(o.Status) {
 			continue
 		}
 		key := o.DriverKey()
@@ -504,10 +521,10 @@ func GetStreakDays(orders []models.StoredOrder) (longestStreak, currentStreak in
 	}
 	dates := make(map[string]bool)
 	for _, o := range orders {
-		if o.PlacedAt.IsZero() || o.Status == "CANCELED" {
+		if o.PlacedAt.IsZero() || !models.CountsTowardStats(o.Status) {
 			continue
 		}
-		dates[o.PlacedAt.Format("2006-01-02")] = true
+		dates[o.PlacedAt.In(models.OrderLocation()).Format("2006-01-02")] = true
 	}
 	if len(dates) == 0 {
 		return 0, 0, time.Time{}
@@ -523,8 +540,10 @@ func GetStreakDays(orders []models.StoredOrder) (longestStreak, currentStreak in
 	streakStart = sortedDates[0]
 	longestStreakStart := sortedDates[0]
 	for i := 1; i < len(sortedDates); i++ {
+		// Tolerance instead of == 1: dates are parsed as UTC midnights so a day
+		// is normally exactly 24h, but keep this robust to any DST/rounding edge.
 		diff := sortedDates[i].Sub(sortedDates[i-1]).Hours() / 24
-		if diff == 1 {
+		if diff > 0.5 && diff < 1.5 {
 			currentStreak++
 			if currentStreak > longestStreak {
 				longestStreak = currentStreak
