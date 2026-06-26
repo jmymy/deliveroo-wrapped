@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"math/rand"
 	"net/http"
 	"net/http/cookiejar"
@@ -12,6 +13,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
+
+	tls_client "github.com/bogdanfinn/tls-client"
 
 	"deliveroo-wrapped/internal/models"
 )
@@ -23,6 +27,12 @@ const defaultHost = "https://co-m.uk.deliveroo.com"
 
 // ordersPageLimit matches the app's page size for the order-history endpoint.
 const ordersPageLimit = 25
+
+// default human-like delays between requests (restored after enrichment pacing).
+const (
+	defaultMinDelay = 800 * time.Millisecond
+	defaultMaxDelay = 2500 * time.Millisecond
+)
 
 // headersToSkip are captured headers we must NOT replay verbatim:
 //   - Host/Content-Length: managed by net/http from the request itself.
@@ -41,7 +51,8 @@ var headersToSkip = map[string]bool{
 
 // Client handles all Deliveroo API interactions with human-like throttling.
 type Client struct {
-	httpClient  *http.Client
+	httpClient  *http.Client          // stdlib fallback + image fetch (CDN)
+	tlsClient   tls_client.HttpClient // iOS-fingerprinted client for the API host
 	jar         *cookiejar.Jar
 	host        string
 	token       string            // full Authorization header value, e.g. "Basic ..."
@@ -56,7 +67,7 @@ type Client struct {
 // NewClient creates a new Deliveroo API client.
 func NewClient() *Client {
 	jar, _ := cookiejar.New(nil)
-	return &Client{
+	c := &Client{
 		jar:     jar,
 		host:    defaultHost,
 		headers: map[string]string{},
@@ -64,9 +75,17 @@ func NewClient() *Client {
 			Jar:     jar,
 			Timeout: 30 * time.Second,
 		},
-		minDelay: 800 * time.Millisecond,
-		maxDelay: 2500 * time.Millisecond,
+		minDelay: defaultMinDelay,
+		maxDelay: defaultMaxDelay,
 	}
+	// Build the iOS-fingerprinted client for API calls. On failure we log and
+	// fall back to the stdlib client (Go fingerprint) so the app still runs.
+	if tc, err := newIOSClient(); err != nil {
+		log.Printf("iOS TLS client unavailable, falling back to stdlib: %v", err)
+	} else {
+		c.tlsClient = tc
+	}
+	return c
 }
 
 // throttle waits a randomized human-like delay before the next request.
@@ -91,6 +110,10 @@ func (c *Client) SetThrottling(min, max time.Duration) {
 	c.maxDelay = max
 }
 
+// ResetThrottling restores the default human-like delay (used after the slow
+// enrichment pacing).
+func (c *Client) ResetThrottling() { c.SetThrottling(defaultMinDelay, defaultMaxDelay) }
+
 // SetAuth stores the Authorization value and the captured iOS-app header block,
 // deriving the numeric user ID from the Basic credential (needed for the order
 // detail path). The header block is replayed verbatim as the app fingerprint.
@@ -103,6 +126,14 @@ func (c *Client) SetAuth(token string, headers map[string]string) {
 	}
 	c.headers = headers
 	c.userID = userIDFromAuth(token)
+	// Seed the captured session cookies into the iOS client's jar so they're
+	// sent and __cf_bm refreshes across the pull.
+	for k, v := range headers {
+		if strings.EqualFold(k, "Cookie") {
+			c.seedCookies(v)
+			break
+		}
+	}
 }
 
 // GetToken returns the current Authorization value.
@@ -220,26 +251,32 @@ func (c *Client) doJSON(reqURL string, out interface{}) error {
 	token, headers := c.token, c.headers
 	c.mu.Unlock()
 
-	req, err := http.NewRequest("GET", reqURL, nil)
-	if err != nil {
-		return fmt.Errorf("creating request: %w", err)
-	}
-	setIOSAppHeaders(req, token, headers)
-
-	resp, err := c.httpClient.Do(req)
+	status, body, err := c.doGET(reqURL, token, headers)
 	if err != nil {
 		return fmt.Errorf("sending request: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
-		return fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body))
+	if status != http.StatusOK {
+		return fmt.Errorf("unexpected status %d: %s", status, snippet(body, 300))
 	}
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
-		return fmt.Errorf("decoding response: %w", err)
+	if err := json.Unmarshal(body, out); err != nil {
+		// Include a body snippet: a Cloudflare challenge/HTML page can be served
+		// with a 200, and block-detection needs to see it (the bare decode error
+		// carries no signal otherwise).
+		return fmt.Errorf("decoding response (%v): %s", err, snippet(body, 300))
 	}
 	return nil
+}
+
+// snippet returns up to n bytes of b as a string, trimmed to a valid UTF-8
+// boundary so a split rune doesn't render as a replacement char.
+func snippet(b []byte, n int) string {
+	if len(b) > n {
+		b = b[:n]
+	}
+	for len(b) > 0 && !utf8.Valid(b) {
+		b = b[:len(b)-1]
+	}
+	return string(b)
 }
 
 // GetOrders fetches one page of order history at the given offset.

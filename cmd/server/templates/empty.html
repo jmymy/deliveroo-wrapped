@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Connect Deliveroo · Wrapped</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/static/css/wrapped.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <a class="brand" href="/"><span class="roo">🦘</span><span>Wrapped <small>Deliveroo</small></span></a>
+</header>
+
+<main class="empty">
+  <div class="panel">
+    <div class="ico float-anim">🦘</div>
+    <p class="eyebrow" style="justify-content:center;margin-bottom:14px">{{if .LoggedIn}}No orders yet{{else}}Not connected yet{{end}}</p>
+    <h1 class="display">Your Wrapped is<br />still in the kitchen.</h1>
+    <p>{{if .LoggedIn}}You're connected — run a sync and we'll plate up your year: orders, savings, that one 72-minute wait.{{else}}Link your Deliveroo account and we'll plate up your year — orders, savings, that one 72-minute wait. It takes about a minute.{{end}}</p>
+    <a class="btn-primary" href="/auth">{{if .LoggedIn}}Sync now →{{else}}Connect Deliveroo →{{end}}</a>
+    <p style="margin-top:22px;opacity:.5;font-size:.85rem">We only read your order history. Nothing is shared without you tapping "share".</p>
+  </div>
+</main>
+
+<script src="/static/js/wrapped.js"></script>
+</body>
+</html>

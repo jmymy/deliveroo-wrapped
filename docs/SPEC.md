@@ -124,6 +124,47 @@ internal/stats     Calculate() + restaurant/driver leaderboards + streaks
   not on Deliveroo's payload, so only the API types + adapter change post-capture.
 - Year filtering via `?year=YYYY` / `?year=all` throughout.
 
+## Kinetic redesign (Direction A)
+The whole UI is a Spotify-Wrapped-grade "Kinetic" redesign (from a Claude Design
+handoff): hub (`/`), a 9-scene scroll **story** (`/story`, count-ups + confetti),
+the **explore** dashboard (`/explore`, Chart.js bar + radar, Leaflet delivery
+heatmap, leaderboards, YoY delta chips, records), and **share cards** (`/cards`,
+square 1080² + story 9:16). Year via `?year=`. Design system in
+`static/css/wrapped.css` + `static/js/wrapped.js`; fonts Bricolage/Hanken;
+`prefers-reduced-motion` honored. Backend additions for it: `Stats.TopAddresses`
+(delivery-address aggregate w/ centroid coords + pct), `DataStore.MemberSince`,
+and funcMap helpers (`monogram`/`restColor`/`dayMonth`/`divf`). Only Direction A
+was delivered; an editorial Direction B could be added later.
+
+## Full enrichment pull (iOS-fingerprinted, block-safe)
+Exact per-order **service fees** and real **restaurant coordinates** live only in
+the per-order detail endpoint (`GET /orderapp/v1/users/{id}/orders/{orderId}`),
+which is Cloudflare bot-protected. To pull all ~850 durably:
+
+- **iOS fingerprint:** API calls go through `internal/deliveroo/transport.go`,
+  built on `bogdanfinn/tls-client` (uTLS + fhttp) with an iOS Safari profile and
+  the captured **header order** — so the JA3/JA4 + HTTP/2 (Akamai) fingerprint
+  matches an iPhone, not Go. Verified against `tls.peet.ws` by the gated
+  `TestIOSFingerprint` (run with `DELIVEROO_FP_TEST=1`; never hits Deliveroo).
+  Cookie jar carries the captured session cookies and refreshes `__cf_bm`.
+  Profile override: `DELIVEROO_TLS_PROFILE` (ios18 | ios26 | ios17).
+- **Max-stealth + block-safe:** enrichment is NOT auto-run after a list sync. It's
+  a deliberate, capped action (`runEnrichment`): 6–20s jittered gaps, a per-session
+  cap (`DELIVEROO_ENRICH_BATCH`, default 30) then stop-with-resume, and it **stops
+  immediately on any block** (401/403/429 or a Cloudflare challenge body) — never
+  retries. Progress persists via the `Enriched` flag, so a block just pauses it.
+- **Dry-run gate:** `/auth` exposes Sync / **Dry-run (1 order)** / Enrich buttons.
+  Always dry-run first — it fetches one order, confirms HTTP 200 + a parsed service
+  fee + coords, and proves the fingerprint is accepted before any batch.
+- **Token:** the captured `Basic orderapp_ios,<JWT>` credential is durable in
+  practice (authenticates despite a stale JWT `exp`), so one capture covers the
+  pull; re-capture only on a real 401.
+- **Cuisine: confirmed unavailable.** Even the menu payload has no human-readable
+  cuisine — only an internal numeric `category_id` and item-level `dietary_tags`
+  ("Halal" etc.). So the cuisine breakdown stays dropped.
+- **Honest caveat:** TLS/HTTP-2 spoofing + session cookies + human pacing is the
+  best practical shot, not a guarantee; the design fails safe (pause + resume).
+
 ## Shipped beyond the original asks
 From a deeper pass over the order payloads (no extra API calls): **Deliveroo
 beat-its-ETA %** (delivered vs estimated), **home-vs-office split**

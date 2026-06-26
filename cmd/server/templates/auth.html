@@ -1,53 +1,90 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Connect — Deliveroo Wrapped</title>
-  <link rel="stylesheet" href="/static/css/app.css">
-  <script src="https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js"
-          integrity="sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2XoQrxeTUQyRjrOnlCoYta87iKBWq3EsdM2" crossorigin="anonymous"></script>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Connect Deliveroo · Wrapped</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/static/css/wrapped.css" />
+<script src="https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js"
+        integrity="sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2XoQrxeTUQyRjrOnlCoYta87iKBWq3EsdM2" crossorigin="anonymous"></script>
+<style>
+  .connect{ padding:120px 20px 80px; max-width:760px; margin:0 auto; }
+  .connect .panel{ background:#fff; border-radius:var(--radius); box-shadow:var(--shadow); padding:34px; }
+  .connect h1{ font-size:clamp(2rem,5vw,3rem); }
+  .connect .steps{ font-size:.95rem; line-height:1.8; margin:14px 0 22px; padding-left:20px; opacity:.8; }
+  .connect label{ display:block; font-weight:700; margin:18px 0 6px; font-family:"Bricolage Grotesque"; }
+  .connect textarea, .connect input[type=text]{
+    width:100%; padding:13px 15px; border:1px solid rgba(26,46,53,.16); border-radius:14px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:13px; background:var(--paper); }
+  .connect textarea:focus, .connect input:focus{ outline:2px solid var(--teal); border-color:var(--teal); }
+  .connect .hint{ opacity:.6; font-size:.85rem; margin-top:6px; }
+  .connect code{ background:rgba(26,46,53,.06); padding:1px 6px; border-radius:6px; font-size:.85em; }
+  .error-message{ background:#ffe7e6; color:#c0322f; padding:12px 16px; border-radius:14px; margin-top:14px; font-weight:600; }
+</style>
 </head>
 <body>
-  <div class="topbar">
-    <div class="brand">Deliveroo <span>Wrapped</span></div>
-    <div><a href="/">Dashboard</a></div>
+
+<header class="topbar">
+  <a class="brand" href="/"><span class="roo">🦘</span><span>Wrapped <small>Deliveroo</small></span></a>
+  <nav class="topnav" aria-label="Primary"><a href="/" class="active">Home</a></nav>
+</header>
+
+<main class="connect">
+  <div class="panel">
+    <p class="eyebrow" style="margin-bottom:10px">Connect</p>
+    <h1 class="display">Plug in your Deliveroo.</h1>
+    <p style="opacity:.7;margin-top:10px">Deliveroo has no public API, so we replay a request captured from the iOS app. Everything stays on your machine.</p>
+
+    <ol class="steps">
+      <li>In Charles, enable <strong>SSL Proxying</strong> for <code>*.deliveroo.com</code> and trust the Charles cert on your iPhone (full trust in Certificate Trust Settings).</li>
+      <li>Point the iPhone's Wi-Fi HTTP proxy at your Mac (port 8888), open Deliveroo, and view your <strong>Order history</strong>.</li>
+      <li>Right-click the order-history request → <strong>Copy cURL Request</strong>, and paste it below.</li>
+    </ol>
+
+    <form hx-post="/api/manual-auth" hx-target="#auth-result" hx-swap="innerHTML">
+      <label for="curl">Copy-as-cURL (or a raw <code>Key: Value</code> header block)</label>
+      <textarea id="curl" name="curl" rows="9" placeholder="curl 'https://co-m.uk.deliveroo.com/consumer/order-history/v1/orders' \
+  -H 'Authorization: Basic ...' \
+  -H 'User-Agent: Deliveroo-OrderApp/3.328.0 (iPhone; ...)' \
+  -H 'X-Roo-...: ...'"></textarea>
+      <p class="hint">We pull out the <code>Authorization</code> credential and keep every other header verbatim so requests match the real app.</p>
+
+      <label for="token">Refresh token only (optional)</label>
+      <input type="text" id="token" name="token" placeholder="Basic ... — paste a fresh credential later without re-pasting headers" />
+
+      <label for="user_name">Your name (optional, for the dashboard)</label>
+      <input type="text" id="user_name" name="user_name" placeholder="e.g. Jonathan" />
+
+      <div style="margin-top:22px">
+        <button class="btn-primary" type="submit">Connect &amp; save</button>
+      </div>
+    </form>
+    <div id="auth-result"></div>
   </div>
 
-  <div class="wrap">
-    <div class="hero">
-      <h1>Connect your Deliveroo account</h1>
-      <p>Deliveroo has no public API, so we replay a request captured from the iOS app. Nothing leaves your machine.</p>
+  {{if .Auth.LoggedIn}}
+  <div class="panel" style="margin-top:24px">
+    <p class="eyebrow" style="margin-bottom:10px">Pull data</p>
+    <h2 class="display" style="font-size:1.6rem">Sync &amp; enrich.</h2>
+    <p style="opacity:.7;margin:8px 0 6px">
+      <strong>Sync</strong> pulls your order history (fast). <strong>Enrich</strong> fills exact
+      service fees + restaurant coordinates from the per-order detail endpoint — it's
+      bot-protected, so it runs in small, slow, capped sessions and stops cleanly if blocked.
+    </p>
+    <p class="hint" style="margin-bottom:16px">Run <strong>Dry-run</strong> first (one order) to confirm the iOS fingerprint is accepted before any batch.</p>
+    <div style="display:flex; gap:10px; flex-wrap:wrap">
+      <button class="btn-primary" hx-post="/api/sync" hx-target="#pull-status" hx-swap="innerHTML">Sync orders</button>
+      <button class="btn-primary" style="background:var(--ink);color:#fff" hx-post="/api/enrich?dry=1" hx-target="#pull-status" hx-swap="innerHTML">Dry-run (1 order)</button>
+      <button class="btn-primary" style="background:var(--violet);color:#fff" hx-post="/api/enrich" hx-target="#pull-status" hx-swap="innerHTML">Enrich a batch</button>
     </div>
-
-    <div class="card">
-      <h2 style="margin-top:0">Paste a captured request</h2>
-      <ol class="hint" style="font-size:14px; line-height:1.7">
-        <li>In Charles, enable <strong>SSL Proxying</strong> for <code>*.deliveroo.com</code> and trust the Charles cert on your iPhone (full trust in Certificate Trust Settings).</li>
-        <li>Point the iPhone's Wi-Fi HTTP proxy at your Mac (port 8888), open Deliveroo, and view your <strong>Order history</strong>.</li>
-        <li>Right-click the order-history request → <strong>Copy cURL Request</strong>, and paste it below.</li>
-      </ol>
-
-      <form hx-post="/api/manual-auth" hx-target="#auth-result" hx-swap="innerHTML">
-        <label for="curl">Copy-as-cURL (or a raw <code>Key: Value</code> header block)</label>
-        <textarea id="curl" name="curl" rows="10" placeholder="curl 'https://api.deliveroo.com/consumer/v2/orders' \
-  -H 'Authorization: Bearer eyJ...' \
-  -H 'User-Agent: Deliveroo/3.123.0 (iPhone; iOS 17.5; Scale/3.00)' \
-  -H 'x-roo-...: ...'"></textarea>
-        <p class="hint">We pull out the <code>Authorization</code> token and keep every other header verbatim so requests match the real app.</p>
-
-        <label for="token">Refresh token only (optional)</label>
-        <input type="text" id="token" name="token" placeholder="Bearer eyJ... — paste a fresh token later without re-pasting headers">
-
-        <label for="user_name">Your name (optional, for the dashboard)</label>
-        <input type="text" id="user_name" name="user_name" placeholder="e.g. Jonathan">
-
-        <div style="margin-top:20px">
-          <button class="btn" type="submit">Connect & save</button>
-        </div>
-      </form>
-      <div id="auth-result"></div>
-    </div>
+    <div id="pull-status" style="margin-top:16px"></div>
   </div>
+  {{end}}
+</main>
+
+<script src="/static/js/wrapped.js"></script>
 </body>
 </html>

@@ -105,11 +105,11 @@ func main() {
 	}
 
 	client := deliveroo.NewClient()
+	if auth.Host != "" {
+		client.SetHost(auth.Host) // before SetAuth so cookies seed under the right host
+	}
 	if auth.Token != "" {
 		client.SetAuth(auth.Token, auth.Headers)
-	}
-	if auth.Host != "" {
-		client.SetHost(auth.Host)
 	}
 
 	logoDir := filepath.Join(dataDir, "logos")
@@ -128,8 +128,17 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle("/static/", http.FileServer(http.FS(staticFS)))
-	mux.HandleFunc("/", server.handleIndex)
-	mux.HandleFunc("/share", server.handleShare)
+	mux.HandleFunc("/", server.handleHub)
+	mux.HandleFunc("/story", server.handleStory)
+	mux.HandleFunc("/explore", server.handleExplore)
+	mux.HandleFunc("/cards", server.handleCards)
+	mux.HandleFunc("/share", func(w http.ResponseWriter, r *http.Request) {
+		target := "/cards"
+		if r.URL.RawQuery != "" {
+			target += "?" + r.URL.RawQuery
+		}
+		http.Redirect(w, r, target, http.StatusMovedPermanently)
+	})
 	mux.HandleFunc("/auth", server.handleAuth)
 	mux.HandleFunc("/api/manual-auth", server.handleManualAuth)
 	mux.HandleFunc("/api/logout", server.handleLogout)
@@ -190,23 +199,40 @@ func importOrdersFile(store *storage.Storage, data *models.DataStore, path strin
 }
 
 // deriveHost extracts scheme://host from a captured request URL, falling back to
-// the captured "Host" header. Returns "" if neither is present.
+// the captured "Host" header. Returns "" unless it's an https Deliveroo host —
+// the token is sent to this host, so it must never be an arbitrary pasted host.
 func deriveHost(rawURL string, headers map[string]string) string {
+	host := ""
 	if rawURL != "" {
 		if u, err := url.Parse(rawURL); err == nil && u.Host != "" {
 			scheme := u.Scheme
 			if scheme == "" {
 				scheme = "https"
 			}
-			return scheme + "://" + u.Host
+			host = scheme + "://" + u.Host
 		}
 	}
-	for k, v := range headers {
-		if strings.EqualFold(k, "Host") && v != "" {
-			return "https://" + v
+	if host == "" {
+		for k, v := range headers {
+			if strings.EqualFold(k, "Host") && v != "" {
+				host = "https://" + v
+				break
+			}
+		}
+	}
+	if host != "" {
+		if u, err := url.Parse(host); err == nil && u.Scheme == "https" && isDeliverooHost(u.Hostname()) {
+			return host
 		}
 	}
 	return ""
+}
+
+// isDeliverooHost allowlists the API host so a pasted credential can't be sent
+// anywhere else.
+func isDeliverooHost(h string) bool {
+	h = strings.ToLower(h)
+	return h == "deliveroo.com" || strings.HasSuffix(h, ".deliveroo.com")
 }
 
 func plusMonthlyFromEnv() float64 {
@@ -269,6 +295,15 @@ func funcMap() template.FuncMap {
 		},
 		"add": func(a, b int) int { return a + b },
 		"toF": func(i int) float64 { return float64(i) },
+		"divf": func(a, b float64) float64 {
+			if b == 0 {
+				return 0
+			}
+			return a / b
+		},
+		"monogram":  monogram,
+		"restColor": restColor,
+		"dayMonth":  dayMonth,
 		// Year-over-year deltas (current vs previous).
 		"signedInt": func(cur, prev int) string {
 			d := cur - prev
@@ -342,84 +377,171 @@ func (s *Server) ordersForYear(year int) []models.StoredOrder {
 	return s.store.GetOrdersForYear(s.data, year)
 }
 
-func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		http.NotFound(w, r)
-		return
+// monogram returns 1-2 uppercase initials for a restaurant avatar.
+func monogram(name string) string {
+	fields := strings.Fields(strings.TrimSpace(name))
+	if len(fields) == 0 {
+		return "?"
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	r := []rune(fields[0])
+	out := strings.ToUpper(string(r[0]))
+	if len(fields) > 1 {
+		r2 := []rune(fields[1])
+		out += strings.ToUpper(string(r2[0]))
+	} else if len(r) > 1 {
+		out += strings.ToUpper(string(r[1]))
+	}
+	return out
+}
 
+var restPalette = []string{"#FF5E5B", "#FFB400", "#7B61FF", "#FF8A00", "#00A99D", "#00CCBC"}
+
+// restColor returns a round-robin avatar background for leaderboard index i.
+func restColor(i int) string { return restPalette[i%len(restPalette)] }
+
+// dayMonth formats a "2006-01-02" date string as "2 Jan"; passes through on error.
+func dayMonth(s string) string {
+	if t, err := time.Parse("2006-01-02", s); err == nil {
+		return t.Format("2 Jan")
+	}
+	return s
+}
+
+// pageCtx holds the year + computed stats shared by every page handler.
+type pageCtx struct {
+	Year           int
+	AvailableYears []int
+	Stats          *models.YearlyStats
+	PrevStats      *models.YearlyStats
+	PrevYear       int
+	HasPrev        bool
+	HasData        bool
+}
+
+// pageCtx computes the per-request year stats + prior-year comparison. Caller
+// must hold s.mu.RLock.
+func (s *Server) buildPageCtx(r *http.Request) pageCtx {
 	year := s.yearFromQuery(r)
 	orders := s.ordersForYear(year)
 	yearStats := stats.Calculate(orders, year, s.data.PlusMonthlyCost)
-	longestStreak, currentStreak, _ := stats.GetStreakDays(orders)
+	avail := s.store.GetAvailableYears(s.data)
 
-	// Year-over-year comparison: when a specific year is selected and the prior
-	// year has data, compute its stats so the dashboard can show deltas.
 	var prevStats *models.YearlyStats
 	prevYear := year - 1
 	if year != 0 {
-		for _, y := range s.store.GetAvailableYears(s.data) {
+		for _, y := range avail {
 			if y == prevYear {
 				prevStats = stats.Calculate(s.ordersForYear(prevYear), prevYear, s.data.PlusMonthlyCost)
 				break
 			}
 		}
 	}
+	return pageCtx{
+		Year: year, AvailableYears: avail,
+		Stats: yearStats, PrevStats: prevStats, PrevYear: prevYear,
+		HasPrev: prevStats != nil && prevStats.TotalOrders > 0,
+		HasData: yearStats.TotalOrders > 0,
+	}
+}
 
-	data := map[string]interface{}{
+// viewModel is the JSON injected for the explore charts + map.
+type viewModel struct {
+	SpendByMonth [12]float64           `json:"spendByMonth"`
+	OrdersByDow  [7]int                `json:"ordersByDow"` // Mon..Sun
+	Destinations []models.AddressEntry `json:"destinations"`
+}
+
+func buildViewModel(st *models.YearlyStats) viewModel {
+	var vm viewModel
+	for m := 1; m <= 12; m++ {
+		vm.SpendByMonth[m-1] = st.SpendByMonth[m]
+	}
+	// stats uses 0=Sunday..6=Saturday; the chart wants Mon..Sun.
+	order := []int{1, 2, 3, 4, 5, 6, 0}
+	for i, d := range order {
+		vm.OrdersByDow[i] = st.OrdersByDayOfWeek[d]
+	}
+	vm.Destinations = st.TopAddresses
+	return vm
+}
+
+// baseData seeds the common template keys every page uses.
+func (s *Server) baseData(ctx pageCtx) map[string]interface{} {
+	return map[string]interface{}{
 		"Auth":           s.auth,
-		"Stats":          yearStats,
-		"PrevStats":      prevStats,
-		"PrevYear":       prevYear,
-		"HasPrev":        prevStats != nil && prevStats.TotalOrders > 0,
+		"Stats":          ctx.Stats,
+		"PrevStats":      ctx.PrevStats,
+		"PrevYear":       ctx.PrevYear,
+		"HasPrev":        ctx.HasPrev,
+		"HasData":        ctx.HasData,
 		"UserName":       s.data.UserName,
 		"PlusTier":       s.data.PlusTier,
-		"TotalOrdersDB":  len(s.data.Orders),
-		"LastSync":       s.data.LastSync,
-		"LongestStreak":  longestStreak,
-		"CurrentStreak":  currentStreak,
-		"SlowestOrders":  stats.GetTopOrdersByDuration(orders, 5),
-		"HasData":        yearStats.TotalOrders > 0,
+		"MemberSince":    s.data.MemberSince,
+		"SelectedYear":   ctx.Year,
+		"AvailableYears": ctx.AvailableYears,
+		"LoggedIn":       s.auth.LoggedIn,
 		"SyncInProgress": s.syncInProgress,
-		"SelectedYear":   year,
-		"AvailableYears": s.store.GetAvailableYears(s.data),
 	}
-	s.renderTemplate(w, "index.html", data)
+}
+
+func (s *Server) handleHub(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	ctx := s.buildPageCtx(r)
+	if !ctx.HasData {
+		s.renderTemplate(w, "empty.html", s.baseData(ctx))
+		return
+	}
+	s.renderTemplate(w, "hub.html", s.baseData(ctx))
+}
+
+func (s *Server) handleStory(w http.ResponseWriter, r *http.Request) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	ctx := s.buildPageCtx(r)
+	if !ctx.HasData {
+		s.renderTemplate(w, "empty.html", s.baseData(ctx))
+		return
+	}
+	s.renderTemplate(w, "story.html", s.baseData(ctx))
+}
+
+func (s *Server) handleExplore(w http.ResponseWriter, r *http.Request) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	ctx := s.buildPageCtx(r)
+	if !ctx.HasData {
+		s.renderTemplate(w, "empty.html", s.baseData(ctx))
+		return
+	}
+	data := s.baseData(ctx)
+	data["ViewModel"] = buildViewModel(ctx.Stats)
+	s.renderTemplate(w, "explore.html", data)
+}
+
+func (s *Server) handleCards(w http.ResponseWriter, r *http.Request) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	ctx := s.buildPageCtx(r)
+	if !ctx.HasData {
+		s.renderTemplate(w, "empty.html", s.baseData(ctx))
+		return
+	}
+	data := s.baseData(ctx)
+	if len(ctx.Stats.TopRestaurants) > 0 {
+		data["TopRestaurant"] = &ctx.Stats.TopRestaurants[0]
+	}
+	s.renderTemplate(w, "cards.html", data)
 }
 
 func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	s.renderTemplate(w, "auth.html", map[string]interface{}{"Auth": s.auth})
-}
-
-// handleShare renders screenshot-ready, on-brand summary cards for sharing.
-func (s *Server) handleShare(w http.ResponseWriter, r *http.Request) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	year := s.yearFromQuery(r)
-	orders := s.ordersForYear(year)
-	yearStats := stats.Calculate(orders, year, s.data.PlusMonthlyCost)
-
-	var topRestaurant *models.RestaurantLeaderboardEntry
-	if len(yearStats.TopRestaurants) > 0 {
-		topRestaurant = &yearStats.TopRestaurants[0]
-	}
-
-	data := map[string]interface{}{
-		"Auth":           s.auth,
-		"Stats":          yearStats,
-		"UserName":       s.data.UserName,
-		"PlusTier":       s.data.PlusTier,
-		"TopRestaurant":  topRestaurant,
-		"HasData":        yearStats.TotalOrders > 0,
-		"SelectedYear":   year,
-		"AvailableYears": s.store.GetAvailableYears(s.data),
-	}
-	s.renderTemplate(w, "share.html", data)
 }
 
 // handleManualAuth accepts a pasted "Copy as cURL" command (or a raw header
@@ -454,8 +576,8 @@ func (s *Server) handleManualAuth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	host := deriveHost(parsed.URL, headers)
+	s.client.SetHost(host) // before SetAuth so cookies seed under the right host
 	s.client.SetAuth(token, headers)
-	s.client.SetHost(host)
 
 	s.mu.Lock()
 	s.auth.Token = token
@@ -543,26 +665,45 @@ func (s *Server) handleEnrich(w http.ResponseWriter, r *http.Request) {
 	s.syncTotal = 0
 	s.mu.Unlock()
 
-	go s.performEnrich()
+	dry := r.URL.Query().Get("dry") == "1"
+	go s.performEnrich(dry)
 
 	s.renderTemplate(w, "sync-status.html", map[string]interface{}{
 		"Status": "Starting enrichment...", "Progress": 0, "Total": 0, "ProgressPct": 0.0, "InProgress": true,
 	})
 }
 
-func (s *Server) performEnrich() {
+func (s *Server) performEnrich(dry bool) {
 	defer func() {
 		s.mu.Lock()
 		s.syncInProgress = false
 		s.mu.Unlock()
 	}()
-	s.runEnrichment()
+	s.runEnrichment(dry)
+}
+
+const defaultEnrichBatch = 30
+
+func enrichBatchSize() int {
+	if v := os.Getenv("DELIVEROO_ENRICH_BATCH"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return defaultEnrichBatch
 }
 
 // runEnrichment fills service fee + restaurant coords for delivered, not-yet-
-// enriched orders (one detail call each). Resumable; stops cleanly on auth
-// error so a fresh token can resume it.
-func (s *Server) runEnrichment() {
+// enriched orders via the per-order detail endpoint. It is deliberately
+// MAX-STEALTH: enrichment-paced (6-20s jitter), capped per session, and it
+// STOPS-AND-RESUMES on any block (401/403/429/Cloudflare challenge) — never
+// hammers. dry=true does exactly one order as a fingerprint-proof.
+func (s *Server) runEnrichment(dry bool) {
+	// Slow, human-like pacing for the bot-protected detail endpoint; restore the
+	// snappy default afterwards (list sync uses it).
+	s.client.SetThrottling(6*time.Second, 20*time.Second)
+	defer s.client.ResetThrottling()
+
 	s.mu.RLock()
 	var ids []string
 	for _, o := range s.data.Orders {
@@ -570,24 +711,33 @@ func (s *Server) runEnrichment() {
 			ids = append(ids, o.ID)
 		}
 	}
+	remaining := len(ids)
 	s.mu.RUnlock()
 
-	total := len(ids)
-	if total == 0 {
+	if remaining == 0 {
 		s.updateSyncStatus("Nothing to enrich — all delivered orders already have fee details.", 0, 0)
 		return
 	}
 
+	batch := enrichBatchSize()
+	if dry {
+		batch = 1
+	}
+	if batch > remaining {
+		batch = remaining
+	}
+
 	done := 0
-	for i, id := range ids {
-		s.updateSyncStatus(fmt.Sprintf("Enriching fees %d/%d...", i+1, total), i+1, total)
+	for i := 0; i < batch; i++ {
+		id := ids[i]
+		s.updateSyncStatus(fmt.Sprintf("Enriching %d/%d this session (%d total left)...", i+1, batch, remaining), i+1, batch)
 		d, err := s.client.GetOrderDetails(id)
 		if err != nil {
-			if isAuthError(err) {
+			if isBlocked(err) {
 				s.mu.Lock()
 				s.save()
 				s.mu.Unlock()
-				s.updateSyncStatus(fmt.Sprintf("Token expired after %d/%d. Re-paste a fresh token at /auth, then click Enrich to resume.", done, total), done, total)
+				s.updateSyncStatus(fmt.Sprintf("Stopped — looks blocked after %d (%s). Wait a while and retry later; do NOT hammer.", done, shortErr(err)), done, batch)
 				return
 			}
 			log.Printf("enrich %s failed: %v", id, err)
@@ -597,21 +747,63 @@ func (s *Server) runEnrichment() {
 		if s.store.EnrichOrderFromDetail(s.data, id, d) {
 			done++
 		}
-		if (i+1)%25 == 0 {
+		if (i+1)%10 == 0 {
 			s.save()
 		}
 		s.mu.Unlock()
+
+		if dry {
+			s.mu.Lock()
+			s.save()
+			var so *models.StoredOrder
+			for j := range s.data.Orders {
+				if s.data.Orders[j].ID == id {
+					so = &s.data.Orders[j]
+					break
+				}
+			}
+			s.mu.Unlock()
+			msg := "Dry-run OK ✓ — fetched + parsed one order. Fingerprint works; safe to run a batch."
+			if so != nil {
+				msg = fmt.Sprintf("Dry-run OK ✓ order %s: service fee £%.2f, restaurant %.4f,%.4f. Fingerprint works — safe to run a batch.", id, so.ServiceFee, so.RestaurantLat, so.RestaurantLng)
+			}
+			s.updateSyncStatus(msg, 1, 1)
+			return
+		}
 	}
 
 	s.mu.Lock()
 	s.save()
 	s.mu.Unlock()
-	s.updateSyncStatus(fmt.Sprintf("Enrichment complete! Filled fees for %d orders.", done), total, total)
+	left := remaining - done
+	if left > 0 {
+		s.updateSyncStatus(fmt.Sprintf("Session done: enriched %d, %d left. Wait a bit, then click Enrich to continue.", done, left), batch, batch)
+	} else {
+		s.updateSyncStatus(fmt.Sprintf("Enrichment complete! All %d delivered orders enriched.", done), batch, batch)
+	}
 }
 
-func isAuthError(err error) bool {
+// isBlocked reports an auth/rate/bot block (stop and resume later, never retry).
+func isBlocked(err error) bool {
+	m := strings.ToLower(err.Error())
+	for _, sig := range []string{
+		"status 401", "status 403", "status 429",
+		"just a moment", "cf-mitigated", "attention required",
+		"<!doctype html", "cf-chl", "challenge-platform", "cloudflare",
+	} {
+		if strings.Contains(m, sig) {
+			return true
+		}
+	}
+	return false
+}
+
+func shortErr(err error) string {
 	m := err.Error()
-	return strings.Contains(m, "status 401") || strings.Contains(m, "status 403")
+	if len(m) > 120 {
+		return m[:120]
+	}
+	return m
 }
 
 func (s *Server) handleSyncStatus(w http.ResponseWriter, r *http.Request) {
@@ -649,6 +841,9 @@ func (s *Server) performSync() {
 		if p := plusMonthlyFromOffer(user.Subscription.OfferUname); p > 0 {
 			s.data.PlusMonthlyCost = p
 		}
+		if t, err := time.Parse(time.RFC3339, user.Created); err == nil {
+			s.data.MemberSince = t.Year()
+		}
 		s.mu.Unlock()
 	}
 
@@ -680,11 +875,11 @@ func (s *Server) performSync() {
 	s.save()
 	s.mu.Unlock()
 
-	// Always enrich after listing, so service fees + the restaurant map stay
-	// populated. Only un-enriched orders are fetched, so this is a one-time
-	// backfill then a couple of calls per new order on later syncs.
-	log.Printf("Imported %d new orders; enriching...", added)
-	s.runEnrichment()
+	// Detail enrichment (service fees + restaurant coords) is NOT auto-run after a
+	// list sync: it hits a bot-protected endpoint and must be paced/capped. It's a
+	// deliberate, capped, resumable action via the Enrich button. See runEnrichment.
+	log.Printf("Imported %d new orders.", added)
+	s.updateSyncStatus(fmt.Sprintf("Sync complete — imported %d new orders.", added), total, total)
 }
 
 func (s *Server) updateSyncStatus(status string, progress, total int) {

@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Explore your year · Deliveroo Wrapped</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous" />
+<link rel="stylesheet" href="/static/css/wrapped.css" />
+</head>
+<body>
+{{- $yq := "all"}}{{if ne .SelectedYear 0}}{{$yq = printf "%d" .SelectedYear}}{{end}}
+{{- $yearLabel := "All-time"}}{{if ne .SelectedYear 0}}{{$yearLabel = $yq}}{{end}}
+{{- $cur := .Stats.Currency}}
+
+<header class="topbar">
+  <a class="brand" href="/?year={{$yq}}"><span class="roo">🦘</span><span>Wrapped <small>Deliveroo</small></span></a>
+  <nav class="topnav" aria-label="Primary">
+    <a href="/?year={{$yq}}">Home</a>
+    <a href="/story?year={{$yq}}">Story</a>
+    <a href="/explore?year={{$yq}}" class="active">Explore</a>
+    <a href="/cards?year={{$yq}}">Share</a>
+  </nav>
+</header>
+
+<main class="explore">
+  <section class="explore-hero">
+    <div class="who">
+      {{if .PlusTier}}<span class="pill tier">◆ Plus {{.PlusTier}}</span>{{end}}
+      {{if .MemberSince}}<span style="opacity:.55;font-weight:600">member since {{.MemberSince}}</span>{{end}}
+    </div>
+    <h1 class="display">{{if .UserName}}{{.UserName}}'s{{else}}Your{{end}}<br />{{$yearLabel}} in takeaways.</h1>
+    <div style="margin-top:22px"><div class="yearsel" role="group" aria-label="Choose year">
+      <a href="?year=all" {{if eq .SelectedYear 0}}aria-pressed="true"{{end}}>All-time</a>
+      {{range .AvailableYears}}<a href="?year={{.}}" {{if eq $.SelectedYear .}}aria-pressed="true"{{end}}>{{.}}</a>{{end}}
+    </div></div>
+  </section>
+
+  <section class="grid">
+
+    <article class="card col-3"><div class="kpi">
+      <span class="v num" data-count="{{.Stats.TotalOrders}}">{{.Stats.TotalOrders}}</span><span class="l">orders</span>
+      {{if .HasPrev}}<span class="delta {{deltaClass (toF .Stats.TotalOrders) (toF .PrevStats.TotalOrders) true}}">{{signedInt .Stats.TotalOrders .PrevStats.TotalOrders}} vs {{.PrevYear}}</span>{{end}}
+    </div></article>
+    <article class="card col-3"><div class="kpi">
+      <span class="v num accent" data-count="{{printf "%.0f" .Stats.TotalSpent}}" data-prefix="£">{{formatMoney .Stats.TotalSpent $cur}}</span><span class="l">spent</span>
+      {{if .HasPrev}}<span class="delta {{deltaClass .Stats.TotalSpent .PrevStats.TotalSpent false}}">{{signedMoney .Stats.TotalSpent .PrevStats.TotalSpent $cur}} vs {{.PrevYear}}</span>{{end}}
+    </div></article>
+    <article class="card col-3"><div class="kpi">
+      <span class="v num" data-count="{{.Stats.UniqueRestaurants}}">{{.Stats.UniqueRestaurants}}</span><span class="l">restaurants</span>
+      {{if .HasPrev}}<span class="delta {{deltaClass (toF .Stats.UniqueRestaurants) (toF .PrevStats.UniqueRestaurants) true}}">{{signedInt .Stats.UniqueRestaurants .PrevStats.UniqueRestaurants}} vs {{.PrevYear}}</span>{{end}}
+    </div></article>
+    <article class="card col-3"><div class="kpi">
+      <span class="v num" data-count="{{printf "%.2f" .Stats.AvgOrderTotal}}" data-dp="2" data-prefix="£">{{formatMoney .Stats.AvgOrderTotal $cur}}</span><span class="l">avg order</span>
+    </div></article>
+
+    <article class="card col-8">
+      <h3>Spend by month</h3><div class="sub">Where the money went, month by month</div>
+      <div class="chartbox"><canvas id="chart-month"></canvas></div>
+    </article>
+
+    <article class="card col-4">
+      <h3>When you order</h3><div class="sub">Orders by day of week</div>
+      <div class="chartbox"><canvas id="chart-dow"></canvas></div>
+    </article>
+
+    <article class="card col-6">
+      <h3>Top restaurants</h3><div class="sub">Your most-loved kitchens</div>
+      <ol class="leaderboard" id="lb" style="margin-top:8px">
+        {{range $i, $r := .Stats.TopRestaurants}}
+        <li class="lb-row" style="position:relative">
+          <span class="lb-rank">{{add $i 1}}</span>
+          <span class="lb-mono" style="background:{{restColor $i}};position:relative;overflow:hidden">{{monogram $r.Name}}{{if $r.ID}}<img src="/api/logo?r={{$r.ID}}" alt="" loading="lazy" onerror="this.remove()" style="position:absolute;inset:0;width:100%;height:100%;border-radius:inherit;object-fit:cover">{{end}}</span>
+          <span class="lb-name">{{$r.Name}}</span>
+          <span class="lb-meta">{{$r.OrderCount}}× <span>{{formatMoney $r.TotalSpent $cur}}</span></span>
+        </li>
+        {{end}}
+      </ol>
+    </article>
+
+    <article class="card col-6" style="background:linear-gradient(150deg,#0c4f52,#163a40);color:#fff">
+      <h3 style="color:#fff">Was Plus worth it?</h3><div class="sub" style="color:rgba(255,255,255,.6)">Membership ROI</div>
+      <div style="display:flex;align-items:baseline;gap:14px;margin-top:10px">
+        <span class="num" style="font-size:4rem;color:var(--teal)" data-count="{{printf "%.1f" .Stats.PlusROI}}" data-dp="1">{{formatFloat .Stats.PlusROI 1}}</span>
+        <span style="font-size:1.4rem;opacity:.8">× return</span>
+      </div>
+      <p style="margin-top:8px;opacity:.85">Saved <b class="num" data-count="{{printf "%.0f" .Stats.TotalPlusSavings}}" data-prefix="£">{{formatMoney .Stats.TotalPlusSavings $cur}}</b> on fees against ~<b>{{formatMoney .Stats.PlusSubscriptionCost $cur}}</b> cost.</p>
+      <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
+        <span class="chip" style="background:rgba(255,255,255,.12);color:#fff">Net <b style="color:var(--teal)">{{if ge .Stats.PlusNetBenefit 0.0}}+{{end}}{{formatMoney .Stats.PlusNetBenefit $cur}}</b></span>
+        <span class="chip" style="background:rgba(255,255,255,.12);color:#fff">Verdict <b style="color:var(--teal)">{{if ge .Stats.PlusROI 1.0}}Keep it ✓{{else}}Reconsider{{end}}</b></span>
+      </div>
+    </article>
+
+    <article class="card col-8">
+      <h3>Where it landed</h3><div class="sub">Heatmap of your delivery destinations</div>
+      <div id="map"></div>
+      <div class="dest-split" id="dest-split">
+        {{range $i, $d := .Stats.TopAddresses}}
+        <div class="dest"><div class="v">{{$d.Count}}</div><div style="font-weight:700">{{$d.Name}}</div>
+          <div class="bar-track"><div class="bar-fill" data-w="{{$d.Pct}}" style="background:{{if eq $i 0}}var(--teal){{else}}var(--violet){{end}}"></div></div>
+          <div style="opacity:.55;font-size:.8rem;margin-top:6px">{{$d.Pct}}% of orders</div></div>
+        {{end}}
+      </div>
+    </article>
+
+    <article class="card col-4">
+      <h3>Delivery speed</h3><div class="sub">Average door-to-door</div>
+      <div class="kpi" style="margin:6px 0 16px"><span class="v num" data-count="{{printf "%.0f" .Stats.AvgDeliveryMinutes}}" data-suffix=" min">{{printf "%.0f" .Stats.AvgDeliveryMinutes}}</span></div>
+      <div class="chip-row">
+        <span class="chip">⚡ Fastest <b>{{printf "%.0f" .Stats.ShortestDeliveryMinutes}} min · {{.Stats.ShortestDeliveryRestaurant}}</b></span>
+        <span class="chip">🐌 Longest <b>{{printf "%.0f" .Stats.LongestDeliveryMinutes}} min · {{.Stats.LongestDeliveryRestaurant}}</b></span>
+        <span class="chip">🎯 Beat ETA <b>{{formatFloat .Stats.EtaBeatenPct 0}}%</b></span>
+      </div>
+    </article>
+
+    <article class="card col-4">
+      <h3>Power hour</h3><div class="sub">Your peak ordering time</div>
+      <div class="kpi" style="margin-top:6px"><span class="v num">{{printf "%02d:00" .Stats.PeakHour}}</span><span class="l">most orders placed</span></div>
+    </article>
+
+    <article class="card col-4">
+      <h3>Tipping</h3><div class="sub">A generous one</div>
+      <div class="kpi" style="margin-top:6px"><span class="v num" data-count="{{printf "%.0f" .Stats.TotalTips}}" data-prefix="£">{{formatMoney .Stats.TotalTips $cur}}</span><span class="l">tipped · {{formatFloat .Stats.TippedOrderPct 0}}% of orders</span></div>
+    </article>
+
+    {{if gt .Stats.CreditOrderCount 0}}
+    <article class="card col-4">
+      <h3>Credits &amp; refunds</h3><div class="sub">Money back</div>
+      <div class="kpi" style="margin-top:6px"><span class="v num" data-count="{{printf "%.2f" .Stats.TotalCreditsUsed}}" data-dp="2" data-prefix="£">{{formatMoney .Stats.TotalCreditsUsed $cur}}</span><span class="l">across {{.Stats.CreditOrderCount}} orders</span></div>
+    </article>
+    {{end}}
+
+    {{if .Stats.TopModifiers}}
+    <article class="card col-6">
+      <h3>Top customisations</h3><div class="sub">How you make it yours</div>
+      <div class="chip-row" id="customs" style="margin-top:6px">
+        {{range .Stats.TopModifiers}}<span class="chip">{{.Name}} <b>×{{.Count}}</b></span>{{end}}
+      </div>
+    </article>
+    {{end}}
+
+    {{if .Stats.TopDishes}}
+    <article class="card col-6">
+      <h3>Top dishes</h3><div class="sub">The repeat offenders</div>
+      <div class="chip-row" id="dishes" style="margin-top:6px">
+        {{range .Stats.TopDishes}}<span class="chip">{{.Name}} <b>×{{.Count}}</b></span>{{end}}
+      </div>
+    </article>
+    {{end}}
+
+    <article class="card col-12" style="background:linear-gradient(120deg,#FFB40022,#7B61FF18)">
+      <h3>Records of the year</h3><div class="sub">Personal bests (and one personal worst)</div>
+      <div class="grid" style="margin-top:8px;gap:14px">
+        <div class="col-3"><div class="kpi"><span class="v num">{{dayMonth .Stats.MostOrdersDate}}</span><span class="l">busiest day · {{.Stats.MostOrdersInOneDay}} orders</span></div></div>
+        <div class="col-3"><div class="kpi"><span class="v num">{{monthName .Stats.BusiestMonth}}</span><span class="l">busiest month</span></div></div>
+        <div class="col-3"><div class="kpi"><span class="v num" data-count="{{printf "%.2f" .Stats.BiggestOrderTotal}}" data-dp="2" data-prefix="£">{{formatMoney .Stats.BiggestOrderTotal $cur}}</span><span class="l">biggest order</span></div></div>
+        <div class="col-3"><div class="kpi"><span class="v num">{{.Stats.BiggestOrderRestaurant}}</span><span class="l">that one big night</span></div></div>
+      </div>
+    </article>
+
+  </section>
+
+  <div style="text-align:center;margin-top:50px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+    <a class="btn-primary" href="/story?year={{$yq}}">▶ Replay the story</a>
+    <a class="btn-primary" href="/cards?year={{$yq}}" style="background:var(--ink);color:#fff">📸 Get share cards</a>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"
+        integrity="sha384-9nhczxUqK87bcKHh20fSQcTGD4qq5GhayNYSYWqwBkINBhOfQLg/P5HG5lF1urn4" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"
+        integrity="sha384-mFKkGiGvT5vo1fEyGCD3hshDdKmW3wzXW/x+fWriYJArD0R3gawT6lMvLboM22c0" crossorigin="anonymous"></script>
+<script src="/static/js/wrapped.js"></script>
+<script>
+const ROO = {{ .ViewModel | json }};
+(function () {
+  var REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var GRID = "rgba(26,46,53,.08)";
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  Chart.defaults.font.family = "Hanken Grotesk, sans-serif";
+  Chart.defaults.color = "rgba(26,46,53,.6)";
+  var MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  var DOW = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+
+  new Chart(document.getElementById("chart-month"), {
+    type: "bar",
+    data: { labels: MONTHS, datasets: [{ data: ROO.spendByMonth, backgroundColor: "#00CCBC", borderRadius: 8, maxBarThickness: 34 }] },
+    options: { responsive: true, maintainAspectRatio: false, animation: REDUCED ? false : { duration: 900 },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: function (c) { return "£" + c.raw; } } } },
+      scales: { x: { grid: { display: false } }, y: { grid: { color: GRID }, ticks: { callback: function (v) { return "£" + v; } } } } }
+  });
+
+  new Chart(document.getElementById("chart-dow"), {
+    type: "radar",
+    data: { labels: DOW, datasets: [{ data: ROO.ordersByDow, backgroundColor: "rgba(123,97,255,.18)", borderColor: "#7B61FF", borderWidth: 2, pointBackgroundColor: "#7B61FF" }] },
+    options: { responsive: true, maintainAspectRatio: false, animation: REDUCED ? false : { duration: 900 },
+      plugins: { legend: { display: false } },
+      scales: { r: { grid: { color: GRID }, angleLines: { color: GRID }, ticks: { display: false }, pointLabels: { font: { size: 12, weight: 600 } } } } }
+  });
+
+  if (window.L) {
+    var dst = (ROO.destinations || []).filter(function (d) { return d.lat || d.lng; });
+    var mapEl = document.getElementById("map");
+    if (mapEl && dst.length) {
+      var center = dst.length >= 2 ? [(dst[0].lat + dst[1].lat) / 2, (dst[0].lng + dst[1].lng) / 2] : [dst[0].lat, dst[0].lng];
+      var map = L.map("map", { scrollWheelZoom: false }).setView(center, 13);
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", { attribution: "© OpenStreetMap, © CARTO", maxZoom: 19 }).addTo(map);
+      var pts = [];
+      dst.forEach(function (d) {
+        var n = Math.max(1, Math.round(d.count / 4));
+        for (var i = 0; i < n; i++) pts.push([d.lat + (Math.random() - .5) * .006, d.lng + (Math.random() - .5) * .006, .6 + Math.random() * .4]);
+        L.circleMarker([d.lat, d.lng], { radius: 7, color: "#00A99D", fillColor: "#00CCBC", fillOpacity: 1, weight: 2 }).addTo(map).bindPopup("<b>" + esc(d.name) + "</b><br>" + d.count + " orders");
+      });
+      L.heatLayer(pts, { radius: 30, blur: 22, max: 1, gradient: { .3: "#7B61FF", .6: "#00CCBC", 1: "#FF5E5B" } }).addTo(map);
+      setTimeout(function () { map.invalidateSize(); }, 300);
+    } else if (mapEl) {
+      mapEl.style.display = "none";
+    }
+  }
+})();
+</script>
+</body>
+</html>

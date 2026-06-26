@@ -20,15 +20,39 @@ Deliveroo Wrapped is a Go web app visualizing Deliveroo order history in a
 vehicles → restaurants/drivers). Single binary, embedded templates + static
 assets, HTMX, Chart.js, Leaflet, local JSON storage.
 
+### UI — "Kinetic Wrapped" (Direction A)
+
+The front-end is a Spotify-Wrapped-style experience (ported from a Claude Design
+handoff). Pages: a hub (`/`), a 9-scene scroll story (`/story`), the explore
+dashboard (`/explore`), social share cards (`/cards`), an empty state, and the
+connect form (`/auth`). `/share` 301-redirects to `/cards`. Year is a `?year=`
+query param (server re-renders; `all` = all-time). Design system lives in
+`cmd/server/static/css/wrapped.css` + `static/js/wrapped.js` (count-ups, scroll
+reveals, story engine, confetti, parallax — all DOM/class driven, respects
+`prefers-reduced-motion`). Fonts: Bricolage Grotesque + Hanken Grotesk (Google
+Fonts). Charts via Chart.js, map/heatmap via Leaflet + leaflet.heat (CDN + SRI).
+
 ### Components
 
-- `cmd/server/main.go` — HTTP server, `Server` struct, inline `funcMap`, routes:
-  pages (`/`, `/auth`) and HTMX/JSON endpoints (`/api/manual-auth`, `/api/sync`,
-  `/api/sync-status`, `/api/stats`, `/api/order-locations`, `/api/logout`).
-- `cmd/server/seed.go` — synthetic dev data behind `DELIVEROO_SEED=1`.
+- `cmd/server/main.go` — HTTP server, `Server` struct, inline `funcMap`, the
+  `buildPageCtx`/`baseData`/`buildViewModel` helpers, page handlers
+  (`handleHub`/`handleStory`/`handleExplore`/`handleCards`/`handleAuth`) and
+  HTMX/JSON endpoints (`/api/manual-auth`, `/api/sync`, `/api/enrich`,
+  `/api/sync-status`, `/api/stats`, `/api/order-locations`, `/api/logo`,
+  `/api/logout`). Page handlers render the new templates; missing-data falls to
+  `empty.html`. `explore.html` gets a `ViewModel` JSON (spend-by-month,
+  orders-by-day Mon-Sun, destinations) injected as `const ROO`.
+- `cmd/server/seed.go` — synthetic dev data behind `DELIVEROO_SEED=1` (two
+  delivery addresses so the dest-split + heatmap render).
 - `internal/deliveroo` — `client.go` (throttled token-replay API client; replays
-  the captured iOS-app header block verbatim via `setIOSAppHeaders`) and
-  `curl.go` (parses a "Copy as cURL" paste into token + headers).
+  the captured iOS-app header block), `curl.go` (parses a "Copy as cURL" paste),
+  and `transport.go` (the iOS-fingerprinted HTTP client via `bogdanfinn/tls-client`
+  — JA3/JA4 + HTTP/2 + header order matching an iPhone; used for all API calls so
+  the bot-protected detail-endpoint pull isn't flagged as Go). `fingerprint_test.go`
+  is a gated (`DELIVEROO_FP_TEST=1`) echo check. Enrichment env: `DELIVEROO_TLS_PROFILE`
+  (ios18|ios26|ios17), `DELIVEROO_ENRICH_BATCH` (per-session cap, default 30).
+  Enrichment is manual/capped/block-safe (see `runEnrichment`); Sync/Dry-run/Enrich
+  buttons live on `/auth`.
 - `internal/models` — Deliveroo API response types (**`TODO(phase0)`**: align
   with real captured payloads) and our own flattened `StoredOrder` + `YearlyStats`.
 - `internal/storage` — JSON persistence to `~/.deliveroostats/` and the

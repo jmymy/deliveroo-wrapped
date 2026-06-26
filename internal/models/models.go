@@ -104,6 +104,7 @@ type APIUser struct {
 	ID            string `json:"id"`
 	FullName      string `json:"full_name"`
 	PreferredName string `json:"preferred_name"`
+	Created       string `json:"created"` // e.g. "2022-04-01T14:13:10.657Z"
 	Subscription  struct {
 		Active           bool   `json:"active"`
 		SubscriptionTier string `json:"subscription_tier"` // e.g. "DIAMOND"
@@ -210,12 +211,23 @@ type DishEntry struct {
 	TotalSpent float64 `json:"total_spent"`
 }
 
+// AddressEntry aggregates orders to one delivery address (drives the dest-split
+// bars + the Leaflet heatmap). Lat/Lng is the centroid of that label's orders.
+type AddressEntry struct {
+	Name  string  `json:"name"`
+	Count int     `json:"count"`
+	Pct   int     `json:"pct"` // share of the address-set total
+	Lat   float64 `json:"lat"`
+	Lng   float64 `json:"lng"`
+}
+
 // DataStore holds all synced data, persisted as JSON.
 type DataStore struct {
-	LastSync time.Time     `json:"last_sync"`
-	Orders   []StoredOrder `json:"orders"`
-	UserName string        `json:"user_name"`
-	PlusTier string        `json:"plus_tier"` // e.g. "DIAMOND" (from the user profile)
+	LastSync    time.Time     `json:"last_sync"`
+	Orders      []StoredOrder `json:"orders"`
+	UserName    string        `json:"user_name"`
+	PlusTier    string        `json:"plus_tier"`    // e.g. "DIAMOND" (from the user profile)
+	MemberSince int           `json:"member_since"` // join year (from the profile's created date); 0 = unknown
 	// PlusMonthlyCost is the Deliveroo Plus price per month, used for ROI.
 	// Derived from the profile's offer_uname when available, else
 	// DELIVEROO_PLUS_MONTHLY (default 3.49 GBP).
@@ -310,6 +322,8 @@ type YearlyStats struct {
 
 	// Where you order to (delivery address label → count)
 	OrdersByAddress map[string]int `json:"orders_by_address"`
+	// TopAddresses is the address aggregate with centroid coords (dest-split + map).
+	TopAddresses []AddressEntry `json:"top_addresses"`
 
 	// Credits / refunds applied
 	TotalCreditsUsed float64 `json:"total_credits_used"`
