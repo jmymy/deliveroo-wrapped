@@ -101,7 +101,11 @@ type APIFeeLine struct {
 
 // APIUser is the account profile from GET /orderapp/v1/users/{id}.
 type APIUser struct {
-	ID            string `json:"id"`
+	// ID is numeric in the API payload (e.g. 64217723). It was previously typed
+	// string, which made the whole GetUser decode fail (the numeric user ID
+	// can't unmarshal into a string), so the profile silently never populated.
+	// The user ID we actually use is derived from the auth credential, not here.
+	ID            int64  `json:"id"`
 	FullName      string `json:"full_name"`
 	PreferredName string `json:"preferred_name"`
 	Created       string `json:"created"` // e.g. "2022-04-01T14:13:10.657Z"
