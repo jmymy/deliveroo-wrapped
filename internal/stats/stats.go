@@ -160,7 +160,7 @@ func Calculate(orders []models.StoredOrder, year int, plusMonthlyCost float64) *
 				qty = 1
 			}
 			e.Count += qty
-			e.TotalSpent += it.Price * float64(qty)
+			e.TotalSpent += it.Price // Price is already the line total (unit × qty)
 
 			for _, m := range it.Modifiers {
 				me, ok := modAgg[m]
@@ -550,6 +550,97 @@ func GetRecentOrders(orders []models.StoredOrder, n int) []models.StoredOrder {
 		n = len(sorted)
 	}
 	return sorted[:n]
+}
+
+// CalculateDishInflation tracks how each dish's unit price has moved over the
+// FULL order history (all-time — inflation is inherently multi-year, so it
+// ignores the year filter). A dish qualifies only with enough repeat orders
+// over a long-enough span. Unit price = line total / quantity. Sorted by the
+// largest price increase first.
+func CalculateDishInflation(orders []models.StoredOrder) []models.DishInflationEntry {
+	const (
+		minOrders   = 6
+		minSpanDays = 180
+		maxEntries  = 8
+	)
+	type occ struct {
+		t     time.Time
+		price float64
+	}
+	loc := models.OrderLocation()
+	series := make(map[string][]occ)
+	names := make(map[string][2]string) // key → {restaurant, dish}
+	for _, o := range orders {
+		if o.PlacedAt.IsZero() || !models.CountsTowardStats(o.Status) {
+			continue
+		}
+		for _, it := range o.Items {
+			if it.Name == "" || it.Price <= 0 {
+				continue
+			}
+			qty := it.Qty
+			if qty < 1 {
+				qty = 1
+			}
+			key := o.RestaurantName + "\x00" + it.Name
+			series[key] = append(series[key], occ{t: o.PlacedAt.In(loc), price: it.Price / float64(qty)})
+			if _, ok := names[key]; !ok {
+				names[key] = [2]string{o.RestaurantName, it.Name}
+			}
+		}
+	}
+
+	var out []models.DishInflationEntry
+	for key, occs := range series {
+		if len(occs) < minOrders {
+			continue
+		}
+		sort.Slice(occs, func(i, j int) bool { return occs[i].t.Before(occs[j].t) })
+		if occs[len(occs)-1].t.Sub(occs[0].t).Hours()/24 < minSpanDays {
+			continue
+		}
+		// Monthly average unit price (smooths single-order noise + drives the line).
+		sum := map[string]float64{}
+		cnt := map[string]int{}
+		var order []string
+		for _, oc := range occs {
+			m := oc.t.Format("2006-01")
+			if cnt[m] == 0 {
+				order = append(order, m)
+			}
+			sum[m] += oc.price
+			cnt[m]++
+		}
+		points := make([]models.DishPricePoint, 0, len(order))
+		for _, m := range order {
+			points = append(points, models.DishPricePoint{Label: m, Price: sum[m] / float64(cnt[m])})
+		}
+		first := points[0].Price
+		last := points[len(points)-1].Price
+		if first <= 0 {
+			continue
+		}
+		nm := names[key]
+		out = append(out, models.DishInflationEntry{
+			Name:       nm[1],
+			Restaurant: nm[0],
+			FirstPrice: first,
+			LastPrice:  last,
+			PctChange:  (last - first) / first * 100,
+			OrderCount: len(occs),
+			Points:     points,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].PctChange != out[j].PctChange {
+			return out[i].PctChange > out[j].PctChange
+		}
+		return out[i].OrderCount > out[j].OrderCount
+	})
+	if len(out) > maxEntries {
+		out = out[:maxEntries]
+	}
+	return out
 }
 
 // GetStreakDays calculates the longest consecutive run of days with orders.

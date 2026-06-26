@@ -223,6 +223,24 @@ type ValueBucket struct {
 	Count int    `json:"count"`
 }
 
+// DishPricePoint is one monthly-average unit price for a dish's trend line.
+type DishPricePoint struct {
+	Label string  `json:"label"` // "2024-03"
+	Price float64 `json:"price"`
+}
+
+// DishInflationEntry tracks how the unit price of one dish (at one restaurant)
+// has moved over time — your personal food inflation.
+type DishInflationEntry struct {
+	Name       string           `json:"name"`
+	Restaurant string           `json:"restaurant"`
+	FirstPrice float64          `json:"first_price"`
+	LastPrice  float64          `json:"last_price"`
+	PctChange  float64          `json:"pct_change"`
+	OrderCount int              `json:"order_count"`
+	Points     []DishPricePoint `json:"points"` // monthly avg unit price, chronological
+}
+
 // AddressEntry aggregates orders to one delivery address (drives the dest-split
 // bars + the Leaflet heatmap). Lat/Lng is the centroid of that label's orders.
 type AddressEntry struct {

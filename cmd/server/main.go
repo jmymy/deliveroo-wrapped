@@ -461,14 +461,15 @@ func (s *Server) buildPageCtx(r *http.Request) pageCtx {
 
 // viewModel is the JSON injected for the explore charts + map.
 type viewModel struct {
-	SpendByMonth    [12]float64           `json:"spendByMonth"`
-	DeliveryByMonth [12]float64           `json:"deliveryByMonth"`
-	ServiceByMonth  [12]float64           `json:"serviceByMonth"`
-	OrdersByDow     [7]int                `json:"ordersByDow"`  // Mon..Sun
-	OrdersByHour    [24]int               `json:"ordersByHour"` // 0..23
-	ValueBuckets    []models.ValueBucket  `json:"valueBuckets"`
-	Destinations    []models.AddressEntry `json:"destinations"`
-	Restaurants     []restPoint           `json:"restaurants"`
+	SpendByMonth    [12]float64                 `json:"spendByMonth"`
+	DeliveryByMonth [12]float64                 `json:"deliveryByMonth"`
+	ServiceByMonth  [12]float64                 `json:"serviceByMonth"`
+	OrdersByDow     [7]int                      `json:"ordersByDow"`  // Mon..Sun
+	OrdersByHour    [24]int                     `json:"ordersByHour"` // 0..23
+	ValueBuckets    []models.ValueBucket        `json:"valueBuckets"`
+	Destinations    []models.AddressEntry       `json:"destinations"`
+	Restaurants     []restPoint                 `json:"restaurants"`
+	DishInflation   []models.DishInflationEntry `json:"dishInflation"` // all-time
 }
 
 // restPoint is a restaurant location for the "where your food comes from" map
@@ -559,7 +560,10 @@ func (s *Server) handleExplore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data := s.baseData(ctx)
-	data["ViewModel"] = buildViewModel(ctx.Stats)
+	vm := buildViewModel(ctx.Stats)
+	// Dish inflation is all-time (multi-year trend), independent of the year filter.
+	vm.DishInflation = stats.CalculateDishInflation(s.data.Orders)
+	data["ViewModel"] = vm
 	s.renderTemplate(w, "explore.html", data)
 }
 
