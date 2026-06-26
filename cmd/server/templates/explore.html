@@ -201,6 +201,14 @@
       <div class="chartbox"><canvas id="chart-fees"></canvas></div>
     </article>
 
+    <article class="card col-12" id="infl-card">
+      <h3>Your food inflation 📈</h3><div class="sub">How the unit price of your repeat dishes has changed over the years — tap a dish to see its trend</div>
+      <div class="grid" style="margin-top:10px;gap:18px">
+        <div class="col-6"><div id="infl-board" style="max-height:360px;overflow-y:auto;padding-right:6px"></div></div>
+        <div class="col-6"><div class="chartbox"><canvas id="chart-infl"></canvas></div></div>
+      </div>
+    </article>
+
     <article class="card col-8">
       <h3>Order-value spread</h3><div class="sub">How big your orders run, in {{$cur}}</div>
       <div class="chartbox"><canvas id="chart-values"></canvas></div>
@@ -286,6 +294,54 @@ const ROO = {{ .ViewModel | json }};
       plugins: { legend: { display: true, position: "bottom" }, tooltip: { callbacks: { label: function (c) { return c.dataset.label + ": £" + Number(c.raw).toFixed(2); } } } },
       scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, beginAtZero: true, grid: { color: GRID }, ticks: { callback: function (v) { return "£" + v; } } } } }
   });
+
+  var infl = ROO.dishInflation || [];
+  var inflCard = document.getElementById("infl-card");
+  if (!infl.length) {
+    if (inflCard) inflCard.style.display = "none";
+  } else {
+    var inflChart = null;
+    function renderInflChart(d) {
+      if (inflChart) inflChart.destroy();
+      inflChart = new Chart(document.getElementById("chart-infl"), {
+        type: "line",
+        data: { labels: d.points.map(function (p) { return p.label; }), datasets: [{ data: d.points.map(function (p) { return p.price; }), borderColor: "#7B61FF", backgroundColor: "rgba(123,97,255,.12)", fill: true, tension: .3, pointRadius: 2 }] },
+        options: { responsive: true, maintainAspectRatio: false, animation: REDUCED ? false : { duration: 600 },
+          plugins: { legend: { display: false }, title: { display: true, text: d.name + " @ " + d.restaurant }, tooltip: { callbacks: { label: function (c) { return "£" + Number(c.raw).toFixed(2); } } } },
+          scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 8 } }, y: { grid: { color: GRID }, ticks: { callback: function (v) { return "£" + Number(v).toFixed(2); } } } } }
+      });
+    }
+    var board = document.getElementById("infl-board");
+    var selIdx = 0;
+    infl.forEach(function (d, i) { if (d.order_count > infl[selIdx].order_count) selIdx = i; });
+    if (board) {
+      board.innerHTML = infl.map(function (d, i) {
+        var stable = Math.abs(d.pct_change) <= 2;
+        var up = d.pct_change >= 0;
+        var color = stable ? "#9aa7ad" : (up ? "#FF5E5B" : "#00A99D");
+        var label = stable ? "≈ same" : ((up ? "+" : "") + Math.round(d.pct_change) + "%");
+        return '<div data-idx="' + i + '" class="infl-row" style="display:flex;align-items:center;gap:10px;padding:9px 8px;border-bottom:1px solid rgba(26,46,53,.07);border-radius:8px;cursor:pointer">' +
+          '<div style="flex:1;min-width:0"><div style="font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(d.name) + '</div>' +
+          '<div style="opacity:.55;font-size:.8rem">' + esc(d.restaurant) + ' · ' + d.order_count + ' orders</div></div>' +
+          '<div style="text-align:right;white-space:nowrap;opacity:.8">£' + d.first_price.toFixed(2) + ' → <b>£' + d.last_price.toFixed(2) + '</b></div>' +
+          '<div style="font-weight:800;color:' + color + ';min-width:56px;text-align:right">' + label + '</div>' +
+          '</div>';
+      }).join("");
+      function selectInflRow(i) {
+        selIdx = i;
+        Array.prototype.forEach.call(board.querySelectorAll(".infl-row"), function (el) {
+          el.style.background = (+el.dataset.idx === i) ? "rgba(123,97,255,.10)" : "";
+        });
+        renderInflChart(infl[i]);
+      }
+      Array.prototype.forEach.call(board.querySelectorAll(".infl-row"), function (el) {
+        el.addEventListener("click", function () { selectInflRow(+el.dataset.idx); });
+      });
+      selectInflRow(selIdx);
+    } else {
+      renderInflChart(infl[selIdx]);
+    }
+  }
 
   var vbuckets = ROO.valueBuckets || [];
   new Chart(document.getElementById("chart-values"), {
