@@ -105,3 +105,34 @@ label { display: block; font-weight: 600; margin: 16px 0 6px; }
 
 .pill { display: inline-block; background: rgba(0,204,188,0.12); color: var(--teal-dark);
   padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+
+.delta { display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 700;
+  padding: 2px 8px; border-radius: 999px; }
+.delta .yr { color: var(--muted); font-weight: 600; }
+.delta.up { background: rgba(6,214,160,0.14); color: #04936e; }
+.delta.down { background: rgba(255,107,107,0.14); color: #d64545; }
+.delta.flat { background: var(--line); color: var(--muted); }
+.stat.accent .delta.up, .stat.accent .delta.down, .stat.accent .delta.flat {
+  background: rgba(255,255,255,0.2); color: #fff; }
+
+/* Shareable cards */
+.share-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
+.share-card {
+  position: relative; aspect-ratio: 4 / 5; border-radius: 22px; padding: 28px;
+  color: #fff; overflow: hidden; display: flex; flex-direction: column;
+  box-shadow: 0 10px 30px rgba(26,46,53,0.18);
+}
+.share-card .roo { position: absolute; top: 22px; right: 24px; font-weight: 800; opacity: 0.9; letter-spacing: -0.02em; }
+.share-card .kicker { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.85; }
+.share-card .big { font-size: 52px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.0; margin-top: auto; }
+.share-card .big.sm { font-size: 38px; }
+.share-card .cap { font-size: 16px; opacity: 0.92; margin-top: 8px; font-weight: 600; }
+.share-card .row2 { display: flex; gap: 28px; margin-top: auto; }
+.share-card .row2 .n { font-size: 40px; font-weight: 800; letter-spacing: -0.03em; }
+.share-card .row2 .l { font-size: 13px; opacity: 0.85; font-weight: 600; }
+.share-card.teal { background: linear-gradient(150deg, #00ccbc, #00a99d); }
+.share-card.ink { background: linear-gradient(150deg, #1a2e35, #25424b); }
+.share-card.coral { background: linear-gradient(150deg, #ff6b6b, #ee5253); }
+.share-card.gold { background: linear-gradient(150deg, #ffb84d, #ff9f1a); color: #2a1c00; }
+.share-card .logo { width: 56px; height: 56px; border-radius: 14px; object-fit: cover; border: 2px solid rgba(255,255,255,0.4); }
+.share-hint { color: var(--muted); font-size: 14px; margin: 6px 0 18px; }

@@ -129,6 +129,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("/static/", http.FileServer(http.FS(staticFS)))
 	mux.HandleFunc("/", server.handleIndex)
+	mux.HandleFunc("/share", server.handleShare)
 	mux.HandleFunc("/auth", server.handleAuth)
 	mux.HandleFunc("/api/manual-auth", server.handleManualAuth)
 	mux.HandleFunc("/api/logout", server.handleLogout)
@@ -267,6 +268,41 @@ func funcMap() template.FuncMap {
 			return template.JS(b)
 		},
 		"add": func(a, b int) int { return a + b },
+		"toF": func(i int) float64 { return float64(i) },
+		// Year-over-year deltas (current vs previous).
+		"signedInt": func(cur, prev int) string {
+			d := cur - prev
+			if d > 0 {
+				return fmt.Sprintf("+%d", d)
+			}
+			return fmt.Sprintf("%d", d)
+		},
+		"signedMoney": func(cur, prev float64, currency string) string {
+			d := cur - prev
+			sign := "+"
+			if d < 0 {
+				sign = "-"
+				d = -d
+			} else if d == 0 {
+				sign = ""
+			}
+			return sign + formatMoney(d, currency)
+		},
+		// deltaClass returns up/down/flat for coloring. higherIsBetter flips the
+		// semantics (e.g. spending more isn't "good", so pass false there).
+		"deltaClass": func(cur, prev float64, higherIsBetter bool) string {
+			if cur == prev {
+				return "flat"
+			}
+			up := cur > prev
+			if !higherIsBetter {
+				up = !up
+			}
+			if up {
+				return "up"
+			}
+			return "down"
+		},
 	}
 }
 
@@ -319,9 +355,25 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	yearStats := stats.Calculate(orders, year, s.data.PlusMonthlyCost)
 	longestStreak, currentStreak, _ := stats.GetStreakDays(orders)
 
+	// Year-over-year comparison: when a specific year is selected and the prior
+	// year has data, compute its stats so the dashboard can show deltas.
+	var prevStats *models.YearlyStats
+	prevYear := year - 1
+	if year != 0 {
+		for _, y := range s.store.GetAvailableYears(s.data) {
+			if y == prevYear {
+				prevStats = stats.Calculate(s.ordersForYear(prevYear), prevYear, s.data.PlusMonthlyCost)
+				break
+			}
+		}
+	}
+
 	data := map[string]interface{}{
 		"Auth":           s.auth,
 		"Stats":          yearStats,
+		"PrevStats":      prevStats,
+		"PrevYear":       prevYear,
+		"HasPrev":        prevStats != nil && prevStats.TotalOrders > 0,
 		"UserName":       s.data.UserName,
 		"PlusTier":       s.data.PlusTier,
 		"TotalOrdersDB":  len(s.data.Orders),
@@ -329,7 +381,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		"LongestStreak":  longestStreak,
 		"CurrentStreak":  currentStreak,
 		"SlowestOrders":  stats.GetTopOrdersByDuration(orders, 5),
-		"HasData":        len(orders) > 0,
+		"HasData":        yearStats.TotalOrders > 0,
 		"SyncInProgress": s.syncInProgress,
 		"SelectedYear":   year,
 		"AvailableYears": s.store.GetAvailableYears(s.data),
@@ -341,6 +393,33 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	s.renderTemplate(w, "auth.html", map[string]interface{}{"Auth": s.auth})
+}
+
+// handleShare renders screenshot-ready, on-brand summary cards for sharing.
+func (s *Server) handleShare(w http.ResponseWriter, r *http.Request) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	year := s.yearFromQuery(r)
+	orders := s.ordersForYear(year)
+	yearStats := stats.Calculate(orders, year, s.data.PlusMonthlyCost)
+
+	var topRestaurant *models.RestaurantLeaderboardEntry
+	if len(yearStats.TopRestaurants) > 0 {
+		topRestaurant = &yearStats.TopRestaurants[0]
+	}
+
+	data := map[string]interface{}{
+		"Auth":           s.auth,
+		"Stats":          yearStats,
+		"UserName":       s.data.UserName,
+		"PlusTier":       s.data.PlusTier,
+		"TopRestaurant":  topRestaurant,
+		"HasData":        yearStats.TotalOrders > 0,
+		"SelectedYear":   year,
+		"AvailableYears": s.store.GetAvailableYears(s.data),
+	}
+	s.renderTemplate(w, "share.html", data)
 }
 
 // handleManualAuth accepts a pasted "Copy as cURL" command (or a raw header
