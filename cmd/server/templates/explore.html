@@ -67,6 +67,18 @@
       <div class="chartbox"><canvas id="chart-dow"></canvas></div>
     </article>
 
+    <article class="card col-8">
+      <h3>Your ordering hours</h3><div class="sub">When the cravings hit, by hour of day</div>
+      <div class="chartbox"><canvas id="chart-hour"></canvas></div>
+    </article>
+
+    <article class="card col-4">
+      <h3>Weekday vs weekend</h3><div class="sub">When you lean on delivery</div>
+      <div class="kpi" style="margin-top:6px"><span class="v num" data-count="{{pct .Stats.WeekendOrders .Stats.TotalOrders}}" data-suffix="%">{{pct .Stats.WeekendOrders .Stats.TotalOrders}}%</span><span class="l">of orders on weekends</span></div>
+      <div class="bar-track" style="margin-top:10px"><div class="bar-fill" data-w="{{pct .Stats.WeekendOrders .Stats.TotalOrders}}" style="background:var(--violet)"></div></div>
+      <div style="opacity:.55;font-size:.8rem;margin-top:6px">{{.Stats.WeekdayOrders}} weekday · {{.Stats.WeekendOrders}} weekend</div>
+    </article>
+
     <article class="card col-6">
       <h3>Top restaurants</h3><div class="sub">Your most-loved kitchens</div>
       <ol class="leaderboard" id="lb" style="margin-top:8px">
@@ -122,6 +134,23 @@
     </article>
 
     <article class="card col-4">
+      <h3>Night owl</h3><div class="sub">Late-night cravings, after 9pm</div>
+      <div class="kpi" style="margin-top:6px"><span class="v num" data-count="{{.Stats.LateNightOrders}}">{{.Stats.LateNightOrders}}</span><span class="l">after-9pm orders · {{pct .Stats.LateNightOrders .Stats.TotalOrders}}% of the year</span></div>
+    </article>
+
+    <article class="card col-4">
+      <h3>The cost of convenience</h3><div class="sub">Fees on top of the food</div>
+      <div class="kpi" style="margin-top:6px"><span class="v num" data-count="{{printf "%.0f" .Stats.TotalFees}}" data-dp="0" data-prefix="£">{{formatMoney .Stats.TotalFees $cur}}</span><span class="l">in delivery + service fees · {{pctf .Stats.TotalFees .Stats.TotalSpent}}% of spend</span></div>
+    </article>
+
+    {{if .Stats.DriverDataAvailable}}
+    <article class="card col-4">
+      <h3>Familiar faces</h3><div class="sub">Riders you saw more than once</div>
+      <div class="kpi" style="margin-top:6px"><span class="v num" data-count="{{.Stats.RepeatDriverOrders}}">{{.Stats.RepeatDriverOrders}}</span><span class="l">repeat-rider orders · {{pct .Stats.RepeatDriverOrders .Stats.TotalOrders}}%{{if .Stats.TopDriver}} · top {{.Stats.TopDriver.Name}} ×{{.Stats.TopDriver.OrderCount}}{{end}}</span></div>
+    </article>
+    {{end}}
+
+    <article class="card col-4">
       <h3>Tipping</h3><div class="sub">A generous one</div>
       <div class="kpi" style="margin-top:6px"><span class="v num" data-count="{{printf "%.0f" .Stats.TotalTips}}" data-prefix="£">{{formatMoney .Stats.TotalTips $cur}}</span><span class="l">tipped · {{formatFloat .Stats.TippedOrderPct 0}}% of orders</span></div>
     </article>
@@ -146,7 +175,7 @@
     <article class="card col-6">
       <h3>Top dishes</h3><div class="sub">The repeat offenders</div>
       <div class="chip-row" id="dishes" style="margin-top:6px">
-        {{range .Stats.TopDishes}}<span class="chip">{{.Name}} <b>×{{.Count}}</b></span>{{end}}
+        {{range .Stats.TopDishes}}<span class="chip">{{.Name}} <b>×{{.Count}}</b>{{if gt .TotalSpent 0.0}} <span style="opacity:.55">{{formatMoney .TotalSpent $cur}}</span>{{end}}</span>{{end}}
       </div>
     </article>
     {{end}}
@@ -190,6 +219,7 @@ const ROO = {{ .ViewModel | json }};
   Chart.defaults.color = "rgba(26,46,53,.6)";
   var MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   var DOW = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+  var HOURS = ["00","01","02","03","04","05","06","07","08","09","10","11","12","13","14","15","16","17","18","19","20","21","22","23"];
 
   new Chart(document.getElementById("chart-month"), {
     type: "bar",
@@ -204,7 +234,15 @@ const ROO = {{ .ViewModel | json }};
     data: { labels: DOW, datasets: [{ data: ROO.ordersByDow, backgroundColor: "rgba(123,97,255,.18)", borderColor: "#7B61FF", borderWidth: 2, pointBackgroundColor: "#7B61FF" }] },
     options: { responsive: true, maintainAspectRatio: false, animation: REDUCED ? false : { duration: 900 },
       plugins: { legend: { display: false } },
-      scales: { r: { grid: { color: GRID }, angleLines: { color: GRID }, ticks: { display: false }, pointLabels: { font: { size: 12, weight: 600 } } } } }
+      scales: { r: { min: 0, beginAtZero: true, grid: { color: GRID }, angleLines: { color: GRID }, ticks: { display: false }, pointLabels: { font: { size: 12, weight: 600 } } } } }
+  });
+
+  new Chart(document.getElementById("chart-hour"), {
+    type: "bar",
+    data: { labels: HOURS, datasets: [{ data: ROO.ordersByHour, backgroundColor: "#7B61FF", borderRadius: 5, maxBarThickness: 18 }] },
+    options: { responsive: true, maintainAspectRatio: false, animation: REDUCED ? false : { duration: 900 },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { title: function (c) { return c[0].label + ":00"; }, label: function (c) { return c.raw + (c.raw === 1 ? " order" : " orders"); } } } },
+      scales: { x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: false, callback: function (v, i) { return i % 3 === 0 ? HOURS[i] : ""; } } }, y: { beginAtZero: true, grid: { color: GRID }, ticks: { precision: 0 } } } }
   });
 
   if (window.L) {

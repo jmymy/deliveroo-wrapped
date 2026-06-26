@@ -301,6 +301,20 @@ func funcMap() template.FuncMap {
 			}
 			return a / b
 		},
+		// pct returns part/whole as a rounded whole-number percentage (0 when
+		// whole is 0), for "X% of orders" style labels and bar widths.
+		"pct": func(part, whole int) int {
+			if whole == 0 {
+				return 0
+			}
+			return int(float64(part)/float64(whole)*100 + 0.5)
+		},
+		"pctf": func(part, whole float64) int {
+			if whole == 0 {
+				return 0
+			}
+			return int(part/whole*100 + 0.5)
+		},
 		"monogram":  monogram,
 		"restColor": restColor,
 		"dayMonth":  dayMonth,
@@ -447,7 +461,8 @@ func (s *Server) buildPageCtx(r *http.Request) pageCtx {
 // viewModel is the JSON injected for the explore charts + map.
 type viewModel struct {
 	SpendByMonth [12]float64           `json:"spendByMonth"`
-	OrdersByDow  [7]int                `json:"ordersByDow"` // Mon..Sun
+	OrdersByDow  [7]int                `json:"ordersByDow"`  // Mon..Sun
+	OrdersByHour [24]int               `json:"ordersByHour"` // 0..23
 	Destinations []models.AddressEntry `json:"destinations"`
 }
 
@@ -460,6 +475,9 @@ func buildViewModel(st *models.YearlyStats) viewModel {
 	order := []int{1, 2, 3, 4, 5, 6, 0}
 	for i, d := range order {
 		vm.OrdersByDow[i] = st.OrdersByDayOfWeek[d]
+	}
+	for h := 0; h < 24; h++ {
+		vm.OrdersByHour[h] = st.OrdersByHour[h]
 	}
 	vm.Destinations = st.TopAddresses
 	return vm
