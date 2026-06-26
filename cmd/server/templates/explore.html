@@ -182,6 +182,11 @@
     </article>
     {{end}}
 
+    <article class="card col-12">
+      <h3>Fees over time</h3><div class="sub">Delivery + service fees by month — service fills in as orders are enriched</div>
+      <div class="chartbox"><canvas id="chart-fees"></canvas></div>
+    </article>
+
     <article class="card col-8">
       <h3>Order-value spread</h3><div class="sub">How big your orders run, in {{$cur}}</div>
       <div class="chartbox"><canvas id="chart-values"></canvas></div>
@@ -255,6 +260,17 @@ const ROO = {{ .ViewModel | json }};
     options: { responsive: true, maintainAspectRatio: false, animation: REDUCED ? false : { duration: 900 },
       plugins: { legend: { display: false }, tooltip: { callbacks: { title: function (c) { return c[0].label + ":00"; }, label: function (c) { return c.raw + (c.raw === 1 ? " order" : " orders"); } } } },
       scales: { x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: false, callback: function (v, i) { return i % 3 === 0 ? HOURS[i] : ""; } } }, y: { beginAtZero: true, grid: { color: GRID }, ticks: { precision: 0 } } } }
+  });
+
+  new Chart(document.getElementById("chart-fees"), {
+    type: "bar",
+    data: { labels: MONTHS, datasets: [
+      { label: "Delivery", data: ROO.deliveryByMonth, backgroundColor: "#00CCBC", borderRadius: 4, stack: "fees", maxBarThickness: 34 },
+      { label: "Service", data: ROO.serviceByMonth, backgroundColor: "#FF5E5B", borderRadius: 4, stack: "fees", maxBarThickness: 34 }
+    ] },
+    options: { responsive: true, maintainAspectRatio: false, animation: REDUCED ? false : { duration: 900 },
+      plugins: { legend: { display: true, position: "bottom" }, tooltip: { callbacks: { label: function (c) { return c.dataset.label + ": £" + Number(c.raw).toFixed(2); } } } },
+      scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, beginAtZero: true, grid: { color: GRID }, ticks: { callback: function (v) { return "£" + v; } } } } }
   });
 
   var vbuckets = ROO.valueBuckets || [];

@@ -31,14 +31,16 @@ func orderValueBucket(total float64) int {
 // plusMonthlyCost is the Deliveroo Plus price per month, used for ROI.
 func Calculate(orders []models.StoredOrder, year int, plusMonthlyCost float64) *models.YearlyStats {
 	st := &models.YearlyStats{
-		Year:              year,
-		OrdersByMonth:     make(map[int]int),
-		SpendByMonth:      make(map[int]float64),
-		OrdersByDayOfWeek: make(map[int]int),
-		OrdersByHour:      make(map[int]int),
-		OrdersByCuisine:   make(map[string]int),
-		SpendByCuisine:    make(map[string]float64),
-		OrdersByAddress:   make(map[string]int),
+		Year:                year,
+		OrdersByMonth:       make(map[int]int),
+		SpendByMonth:        make(map[int]float64),
+		DeliveryFeesByMonth: make(map[int]float64),
+		ServiceFeesByMonth:  make(map[int]float64),
+		OrdersByDayOfWeek:   make(map[int]int),
+		OrdersByHour:        make(map[int]int),
+		OrdersByCuisine:     make(map[string]int),
+		SpendByCuisine:      make(map[string]float64),
+		OrdersByAddress:     make(map[string]int),
 	}
 	for i := 1; i <= 12; i++ {
 		st.OrdersByMonth[i] = 0
@@ -109,6 +111,8 @@ func Calculate(orders []models.StoredOrder, year int, plusMonthlyCost float64) *
 		month := int(pt.Month())
 		st.OrdersByMonth[month]++
 		st.SpendByMonth[month] += o.Total
+		st.DeliveryFeesByMonth[month] += o.DeliveryFee
+		st.ServiceFeesByMonth[month] += o.ServiceFee
 		st.OrdersByDayOfWeek[int(pt.Weekday())]++
 		hour := pt.Hour()
 		st.OrdersByHour[hour]++
