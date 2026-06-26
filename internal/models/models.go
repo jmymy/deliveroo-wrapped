@@ -215,6 +215,12 @@ type DishEntry struct {
 	TotalSpent float64 `json:"total_spent"`
 }
 
+// ValueBucket is one band of the order-value histogram (e.g. "£15–20" → 34).
+type ValueBucket struct {
+	Label string `json:"label"`
+	Count int    `json:"count"`
+}
+
 // AddressEntry aggregates orders to one delivery address (drives the dest-split
 // bars + the Leaflet heatmap). Lat/Lng is the centroid of that label's orders.
 type AddressEntry struct {
@@ -305,6 +311,11 @@ type YearlyStats struct {
 	BiggestOrderTotal      float64   `json:"biggest_order_total"`
 	BiggestOrderRestaurant string    `json:"biggest_order_restaurant"`
 	BiggestOrderDate       time.Time `json:"biggest_order_date"`
+	LongestStreak          int       `json:"longest_streak"` // consecutive days with an order
+	LongestStreakStart     time.Time `json:"longest_streak_start"`
+
+	// Order-value distribution (histogram bands by order total)
+	OrderValueBuckets []ValueBucket `json:"order_value_buckets"`
 
 	// Patterns
 	OrdersByMonth     map[int]int     `json:"orders_by_month"`

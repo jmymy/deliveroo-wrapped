@@ -7,6 +7,26 @@ import (
 	"deliveroo-wrapped/internal/models"
 )
 
+// orderValueBands defines the histogram bands for the order-value distribution.
+// Labels are currency-agnostic ranges; the template adds the currency context.
+var orderValueBands = []struct {
+	Label string
+	Max   float64 // exclusive upper bound; the last band is the catch-all
+}{
+	{"<10", 10}, {"10–15", 15}, {"15–20", 20}, {"20–25", 25},
+	{"25–30", 30}, {"30–40", 40}, {"40+", 1e18},
+}
+
+// orderValueBucket returns the index of the band an order total falls into.
+func orderValueBucket(total float64) int {
+	for i, b := range orderValueBands {
+		if total < b.Max {
+			return i
+		}
+	}
+	return len(orderValueBands) - 1
+}
+
 // Calculate computes yearly statistics from orders. year == 0 means all years.
 // plusMonthlyCost is the Deliveroo Plus price per month, used for ROI.
 func Calculate(orders []models.StoredOrder, year int, plusMonthlyCost float64) *models.YearlyStats {
@@ -40,6 +60,7 @@ func Calculate(orders []models.StoredOrder, year int, plusMonthlyCost float64) *
 	var etaCount, etaBeaten int
 	var etaSumDiff, worstLate, earliest float64
 	st.ShortestDeliveryMinutes = -1
+	valueCounts := make([]int, len(orderValueBands))
 
 	for _, o := range orders {
 		if year != 0 && o.PlacedAt.Year() != year {
@@ -57,6 +78,7 @@ func Calculate(orders []models.StoredOrder, year int, plusMonthlyCost float64) *
 
 		// Money
 		st.TotalSpent += o.Total
+		valueCounts[orderValueBucket(o.Total)]++
 		st.TotalSubtotal += o.Subtotal
 		st.TotalDeliveryFees += o.DeliveryFee
 		st.TotalServiceFees += o.ServiceFee
@@ -249,6 +271,23 @@ func Calculate(orders []models.StoredOrder, year int, plusMonthlyCost float64) *
 	st.TopAddresses = CalculateAddressStats(orders, year)
 	st.DriverDataAvailable, st.UniqueDrivers, st.RepeatDriverOrders, st.TopDriver = CalculateDriverStats(orders, year)
 	st.TopDishes = topDishes(dishAgg, 10)
+
+	// Order-value distribution
+	for i, b := range orderValueBands {
+		st.OrderValueBuckets = append(st.OrderValueBuckets, models.ValueBucket{Label: b.Label, Count: valueCounts[i]})
+	}
+
+	// Longest ordering streak (year-filtered to match the selected view).
+	streakInput := orders
+	if year != 0 {
+		streakInput = make([]models.StoredOrder, 0, len(orders))
+		for _, o := range orders {
+			if o.PlacedAt.Year() == year {
+				streakInput = append(streakInput, o)
+			}
+		}
+	}
+	st.LongestStreak, _, st.LongestStreakStart = GetStreakDays(streakInput)
 
 	return st
 }
