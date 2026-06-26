@@ -52,8 +52,8 @@ Fonts). Charts via Chart.js, map/heatmap via Leaflet + leaflet.heat (CDN + SRI).
   seeds only `roo_*` cookies so Cloudflare mints a fresh `__cf_bm`; used for all
   API calls so the bot-protected detail-endpoint pull isn't flagged as Go).
   `Client.Warmup(force)` optionally replays the app's launch POSTs
-  (`/consumer/device-fingerprint`, `/orderapp/v1/session`), gated behind
-  `DELIVEROO_WARMUP=1` and never auto-called. `fingerprint_test.go` is a gated
+  (`/consumer/device-fingerprint`, `/orderapp/v1/session`); `performSync` calls it
+  gated behind `DELIVEROO_WARMUP=1` (no-op unless set). `fingerprint_test.go` is a gated
   (`DELIVEROO_FP_TEST=1`) offline echo suite (JA3/JA4/akamai + cookie + codec
   checks; see `FINDINGS.md`). Enrichment env: `DELIVEROO_TLS_PROFILE`
   (ios26 default | ios18 | ios17), `DELIVEROO_ENRICH_BATCH` (per-session cap, default 30).

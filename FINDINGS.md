@@ -71,9 +71,12 @@ it pins the iOS order even if the profile changes.
 replaying a stale one is more suspicious than presenting none. We now seed only
 `roo_*` (and other non-CF) cookies and skip `__cf_bm` / `cf_clearance` / `__cf*`,
 letting Cloudflare mint a fresh `__cf_bm` via Set-Cookie that the jar captures and
-resends. **Verified:** `TestCookieRoundTrip` seeds a stale `__cf_bm`, sets a
-server cookie via the echo, and confirms (a) the server cookie is captured and
-resent by the jar and (b) the stale `__cf_bm` is **not** replayed.
+resends. `SetAuth` additionally **resets the jar** each time (the same long-lived
+`Client` is re-used across logout/re-auth — `handleManualAuth`/`handleLogout`), so
+a `__cf_bm` captured under one session can't leak into the next; a fresh auth
+behaves like an app relaunch. **Verified:** `TestCookieRoundTrip` seeds a stale
+`__cf_bm`, sets a server cookie via the echo, and confirms (a) the server cookie
+is captured and resent by the jar and (b) the stale `__cf_bm` is **not** replayed.
 
 ### 5. Optional gated warmup (`client.go` `Warmup`, `transport.go` `doPOST`)
 The app POSTs `/consumer/device-fingerprint` (`{"session_id":"<32-hex>"}`) then
@@ -81,10 +84,11 @@ The app POSTs `/consumer/device-fingerprint` (`{"session_id":"<32-hex>"}`) then
 app's **POST header order** (distinct from GETs — `accept` leads, `content-type`
 precedes `cookie`) and the iOS pseudo-header order, generating a fresh random
 `session_id` via `crypto/rand`. It is gated behind `DELIVEROO_WARMUP=1` (or an
-explicit `force`), is **never auto-called and never set in tests**, and `doPOST`
-refuses the stdlib fallback. It is wired to nothing by default — opt-in only, for
-the user's own live dry-run. It may establish session trust + a fresh `__cf_bm`
-before the order pull.
+explicit `force`) and `doPOST` refuses the stdlib fallback. `performSync` calls
+`Warmup(false)` at its start, which **no-ops unless `DELIVEROO_WARMUP=1`** — so it
+is off by default (no Deliveroo POSTs, never in tests) and only fires when the
+user explicitly opts in for their own live dry-run, priming session trust + a
+fresh `__cf_bm` before the order pull.
 
 ### 6. Offline harness (`fingerprint_test.go`, gated `DELIVEROO_FP_TEST=1`)
 Replaced the single bare echo with a suite routed through a real `NewClient()` so

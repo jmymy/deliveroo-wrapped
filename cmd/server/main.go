@@ -826,6 +826,13 @@ func (s *Server) performSync() {
 		s.mu.Unlock()
 	}()
 
+	// Optional session warmup (opt-in via DELIVEROO_WARMUP=1; no-op otherwise).
+	// Mirrors the app's launch POSTs to prime a session + fresh __cf_bm before
+	// the pull. Best-effort: a failure here must not abort the sync.
+	if err := s.client.Warmup(false); err != nil {
+		log.Printf("Warmup failed (continuing): %v", err)
+	}
+
 	// Fetch the account profile first: name + Plus tier + Plus price.
 	s.updateSyncStatus("Fetching your profile...", 0, 0)
 	if user, err := s.client.GetUser(); err != nil {

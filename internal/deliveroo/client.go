@@ -185,6 +185,11 @@ func (c *Client) SetAuth(token string, headers map[string]string) {
 	}
 	c.headers = headers
 	c.userID = userIDFromAuth(token)
+	// Reset the jar on every auth change so cookies never leak across sessions:
+	// the same long-lived Client is re-used across logout/re-auth (see
+	// handleManualAuth/handleLogout), and a __cf_bm captured under a previous
+	// session must not be replayed under a new one. A fresh auth == app relaunch.
+	c.resetCookieJar()
 	// Seed the captured session cookies (roo_*) into the iOS client's jar.
 	// Cloudflare cookies are skipped (see seedCookies) so CF mints a fresh
 	// __cf_bm, which the jar then captures and refreshes across the pull.
@@ -194,6 +199,16 @@ func (c *Client) SetAuth(token string, headers map[string]string) {
 			break
 		}
 	}
+}
+
+// resetCookieJar replaces the iOS client's cookie jar with a fresh empty one,
+// clearing any cookies captured under a previous session. SetCookieJar is the
+// library-recommended way to clear the jar. No-op when the tls-client is absent.
+func (c *Client) resetCookieJar() {
+	if c.tlsClient == nil {
+		return
+	}
+	c.tlsClient.SetCookieJar(tls_client.NewCookieJar())
 }
 
 // GetToken returns the current Authorization value.
