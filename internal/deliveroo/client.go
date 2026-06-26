@@ -10,10 +10,14 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
+
+	crand "crypto/rand"
+	"encoding/hex"
 
 	tls_client "github.com/bogdanfinn/tls-client"
 
@@ -36,14 +40,16 @@ const (
 
 // headersToSkip are captured headers we must NOT replay verbatim:
 //   - Host/Content-Length: managed by net/http from the request itself.
-//   - Accept-Encoding: if we set it manually, Go won't transparently decompress
-//     the (gzip/br) response and json decoding fails. Let the transport handle it.
 //   - If-Modified-Since/If-None-Match: would yield a 304 with an empty body.
 //   - Connection: hop-by-hop.
+//
+// Accept-Encoding is handled per-path: the tls path (doGET/doPOST) SENDS the
+// app's "gzip, deflate, br" because tls-client transparently decompresses; the
+// stdlib fallback (setIOSAppHeaders) still strips it, because stdlib only
+// auto-decodes encodings it set itself.
 var headersToSkip = map[string]bool{
 	"host":              true,
 	"content-length":    true,
-	"accept-encoding":   true,
 	"if-modified-since": true,
 	"if-none-match":     true,
 	"connection":        true,
@@ -114,6 +120,59 @@ func (c *Client) SetThrottling(min, max time.Duration) {
 // enrichment pacing).
 func (c *Client) ResetThrottling() { c.SetThrottling(defaultMinDelay, defaultMaxDelay) }
 
+// warmupEnabled gates the optional session warmup. Warmup is NEVER run
+// automatically; only an explicit Warmup(true) caller or DELIVEROO_WARMUP=1 may
+// trigger it. Tests never set this.
+func warmupEnabled() bool { return os.Getenv("DELIVEROO_WARMUP") == "1" }
+
+// randSessionID returns a 32-char lowercase-hex id (16 random bytes), matching
+// the shape of the session_id the app posts to /consumer/device-fingerprint.
+func randSessionID() (string, error) {
+	var b [16]byte
+	if _, err := crand.Read(b[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b[:]), nil
+}
+
+// Warmup optionally primes a session the way the app does on launch: a
+// device-fingerprint POST then a session POST, both with the iOS POST header
+// order. It is gated (force, or DELIVEROO_WARMUP=1) and is NEVER called
+// automatically — the caller opts in. Best-effort: a non-2xx is logged, not
+// fatal. Requires the iOS tls-client (doPOST refuses the stdlib fallback).
+//
+// This issues live requests to the configured host; callers must only enable it
+// when they intend real traffic. It is intentionally not wired into sync/enrich.
+func (c *Client) Warmup(force bool) error {
+	if !force && !warmupEnabled() {
+		return nil
+	}
+	c.throttle()
+	c.mu.Lock()
+	host, token, headers := c.host, c.token, c.headers
+	c.mu.Unlock()
+	if token == "" {
+		return fmt.Errorf("warmup: no auth set")
+	}
+	sid, err := randSessionID()
+	if err != nil {
+		return fmt.Errorf("warmup: session id: %w", err)
+	}
+	fp, _ := json.Marshal(map[string]string{"session_id": sid})
+	if st, _, err := c.doPOST(host+"/consumer/device-fingerprint", token, headers, fp); err != nil {
+		return fmt.Errorf("warmup device-fingerprint: %w", err)
+	} else if st >= 400 {
+		log.Printf("warmup device-fingerprint: status %d", st)
+	}
+	c.throttle()
+	if st, _, err := c.doPOST(host+"/orderapp/v1/session", token, headers, []byte("{}")); err != nil {
+		return fmt.Errorf("warmup session: %w", err)
+	} else if st >= 400 {
+		log.Printf("warmup session: status %d", st)
+	}
+	return nil
+}
+
 // SetAuth stores the Authorization value and the captured iOS-app header block,
 // deriving the numeric user ID from the Basic credential (needed for the order
 // detail path). The header block is replayed verbatim as the app fingerprint.
@@ -126,8 +185,9 @@ func (c *Client) SetAuth(token string, headers map[string]string) {
 	}
 	c.headers = headers
 	c.userID = userIDFromAuth(token)
-	// Seed the captured session cookies into the iOS client's jar so they're
-	// sent and __cf_bm refreshes across the pull.
+	// Seed the captured session cookies (roo_*) into the iOS client's jar.
+	// Cloudflare cookies are skipped (see seedCookies) so CF mints a fresh
+	// __cf_bm, which the jar then captures and refreshes across the pull.
 	for k, v := range headers {
 		if strings.EqualFold(k, "Cookie") {
 			c.seedCookies(v)
@@ -177,7 +237,11 @@ func (c *Client) SetHost(host string) {
 // headers are snapshotted by the caller under c.mu to avoid racing with SetAuth.
 func setIOSAppHeaders(req *http.Request, token string, headers map[string]string) {
 	for k, v := range headers {
-		if headersToSkip[strings.ToLower(k)] {
+		lk := strings.ToLower(k)
+		// Strip Accept-Encoding on the stdlib path: net/http only transparently
+		// decompresses encodings it set itself, so replaying the app's value
+		// here would break json decoding. (The tls path sends it; see doGET.)
+		if headersToSkip[lk] || lk == "accept-encoding" {
 			continue
 		}
 		req.Header.Set(k, v)

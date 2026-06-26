@@ -47,10 +47,16 @@ Fonts). Charts via Chart.js, map/heatmap via Leaflet + leaflet.heat (CDN + SRI).
 - `internal/deliveroo` — `client.go` (throttled token-replay API client; replays
   the captured iOS-app header block), `curl.go` (parses a "Copy as cURL" paste),
   and `transport.go` (the iOS-fingerprinted HTTP client via `bogdanfinn/tls-client`
-  — JA3/JA4 + HTTP/2 + header order matching an iPhone; used for all API calls so
-  the bot-protected detail-endpoint pull isn't flagged as Go). `fingerprint_test.go`
-  is a gated (`DELIVEROO_FP_TEST=1`) echo check. Enrichment env: `DELIVEROO_TLS_PROFILE`
-  (ios18|ios26|ios17), `DELIVEROO_ENRICH_BATCH` (per-session cap, default 30).
+  — JA3/JA4 + HTTP/2 + header + pseudo-header order matching an iPhone; sends the
+  app's `Accept-Encoding: gzip, deflate, br` (tls-client auto-decompresses) and
+  seeds only `roo_*` cookies so Cloudflare mints a fresh `__cf_bm`; used for all
+  API calls so the bot-protected detail-endpoint pull isn't flagged as Go).
+  `Client.Warmup(force)` optionally replays the app's launch POSTs
+  (`/consumer/device-fingerprint`, `/orderapp/v1/session`), gated behind
+  `DELIVEROO_WARMUP=1` and never auto-called. `fingerprint_test.go` is a gated
+  (`DELIVEROO_FP_TEST=1`) offline echo suite (JA3/JA4/akamai + cookie + codec
+  checks; see `FINDINGS.md`). Enrichment env: `DELIVEROO_TLS_PROFILE`
+  (ios26 default | ios18 | ios17), `DELIVEROO_ENRICH_BATCH` (per-session cap, default 30).
   Enrichment is manual/capped/block-safe (see `runEnrichment`); Sync/Dry-run/Enrich
   buttons live on `/auth`.
 - `internal/models` — Deliveroo API response types (**`TODO(phase0)`**: align
