@@ -1,0 +1,16 @@
+{{if .InProgress}}
+<div hx-get="/api/sync-status" hx-trigger="every 1s" hx-swap="outerHTML">
+  <p style="margin:0 0 4px"><strong>{{.Status}}</strong></p>
+  {{if gt .Total 0}}
+  <div class="progress"><div style="width: {{printf "%.0f" .ProgressPct}}%"></div></div>
+  <p class="hint">{{.Progress}} / {{.Total}}</p>
+  {{end}}
+</div>
+{{else}}
+<div>
+  <p style="margin:0"><strong>{{.Status}}</strong></p>
+  {{if gt .Total 0}}
+  <p class="hint"><a href="/">Reload your Wrapped →</a></p>
+  {{end}}
+</div>
+{{end}}

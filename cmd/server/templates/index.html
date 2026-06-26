@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Deliveroo Wrapped</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">Deliveroo <span>Wrapped</span></div>
+    <div>
+      <a href="/">Dashboard</a>
+      <a href="/auth">Connect</a>
+      {{if .Auth.LoggedIn}}<a href="#" hx-post="/api/logout">Log out</a>{{end}}
+    </div>
+  </div>
+
+  <div class="wrap">
+    {{$cur := .Stats.Currency}}
+    <div class="hero">
+      <h1>{{if .UserName}}{{.UserName}}'s{{else}}Your{{end}} Deliveroo Wrapped</h1>
+      <p>
+        {{if eq .SelectedYear 0}}All-time{{else}}{{.SelectedYear}}{{end}} ·
+        {{.Stats.TotalOrders}} orders · {{.Stats.UniqueRestaurants}} restaurants
+        {{if .PlusTier}} · <span class="pill" style="background:rgba(255,255,255,0.2); color:#fff">Plus {{.PlusTier}}</span>{{end}}
+      </p>
+      <div class="year-tabs">
+        <a href="/?year=all" class="{{if eq .SelectedYear 0}}active{{end}}">All time</a>
+        {{range .AvailableYears}}
+        <a href="/?year={{.}}" class="{{if eq $.SelectedYear .}}active{{end}}">{{.}}</a>
+        {{end}}
+      </div>
+    </div>
+
+    {{if not .HasData}}
+    <div class="card empty">
+      <h2>No orders yet</h2>
+      <p>Connect your account and sync to build your Wrapped.</p>
+      <p style="margin-top:18px"><a class="btn" href="/auth">Connect Deliveroo</a></p>
+      {{if .Auth.LoggedIn}}
+      <div style="max-width:420px; margin:24px auto 0">
+        <button class="btn secondary" hx-post="/api/sync" hx-target="#sync-status" hx-swap="innerHTML">Sync orders</button>
+        <div id="sync-status" style="margin-top:14px"></div>
+      </div>
+      {{end}}
+    </div>
+    {{else}}
+
+    {{if .Auth.LoggedIn}}
+    <div style="margin-bottom:18px">
+      <button class="btn secondary" hx-post="/api/sync" hx-target="#sync-status" hx-swap="innerHTML">Re-sync orders</button>
+      <button class="btn secondary" hx-post="/api/enrich" hx-target="#sync-status" hx-swap="innerHTML"
+              title="One detail call per delivered order: fills service fees + restaurant map. Resumable.">Enrich fees &amp; map</button>
+      <span id="sync-status"></span>
+    </div>
+    {{end}}
+
+    <!-- Headline -->
+    <div class="grid">
+      <div class="card stat"><div class="label">Total orders</div><div class="value">{{.Stats.TotalOrders}}</div><div class="sub">across {{.Stats.UniqueRestaurants}} restaurants</div></div>
+      <div class="card stat"><div class="label">Total spent</div><div class="value">{{formatMoney .Stats.TotalSpent $cur}}</div><div class="sub">{{formatMoney .Stats.AvgOrderTotal $cur}} avg / order</div></div>
+      <div class="card stat accent"><div class="label">Saved with Plus</div><div class="value">{{formatMoney .Stats.TotalPlusSavings $cur}}</div><div class="sub">on delivery & service fees</div></div>
+      <div class="card stat"><div class="label">Total tips</div><div class="value">{{formatMoney .Stats.TotalTips $cur}}</div><div class="sub">{{formatFloat .Stats.TippedOrderPct 0}}% of orders tipped</div></div>
+    </div>
+
+    <!-- Plus economics -->
+    <div class="section">
+      <h2>Was Plus worth it?</h2>
+      <div class="grid">
+        <div class="card stat"><div class="label">Fees saved by Plus</div><div class="value">{{formatMoney .Stats.TotalPlusSavings $cur}}</div></div>
+        <div class="card stat"><div class="label">Est. Plus cost</div><div class="value">{{formatMoney .Stats.PlusSubscriptionCost $cur}}</div><div class="sub">over the active months</div></div>
+        <div class="card stat {{if ge .Stats.PlusNetBenefit 0.0}}accent{{end}}">
+          <div class="label">Net benefit</div>
+          <div class="value">{{formatMoney .Stats.PlusNetBenefit $cur}}</div>
+          <div class="sub">{{formatFloat .Stats.PlusROI 1}}× return on the subscription</div>
+        </div>
+        <div class="card stat"><div class="label">Total fees paid</div><div class="value">{{formatMoney .Stats.TotalFees $cur}}</div><div class="sub">≈ {{formatFloat .Stats.FeesAsMeals 1}} extra meals' worth</div></div>
+      </div>
+    </div>
+
+    <!-- Delivery time + records -->
+    <div class="section">
+      <h2>Delivery times & records</h2>
+      <div class="grid">
+        <div class="card stat"><div class="label">Avg delivery</div><div class="value">{{formatMinutes .Stats.AvgDeliveryMinutes}}</div></div>
+        {{if gt .Stats.EtaSampleCount 0}}
+        <div class="card stat accent">
+          <div class="label">Deliveroo beat its ETA</div>
+          <div class="value">{{formatFloat .Stats.EtaBeatenPct 0}}%</div>
+          <div class="sub">{{if lt .Stats.AvgVsEtaMinutes 0.0}}avg {{formatFloat (absf .Stats.AvgVsEtaMinutes) 1}} min early{{else}}avg {{formatFloat .Stats.AvgVsEtaMinutes 1}} min late{{end}} · worst +{{formatFloat .Stats.WorstLateMinutes 0}}m</div>
+        </div>
+        {{end}}
+        <div class="card stat"><div class="label">Longest wait</div><div class="value">{{formatMinutes .Stats.LongestDeliveryMinutes}}</div><div class="sub">{{.Stats.LongestDeliveryRestaurant}} · {{formatDate .Stats.LongestDeliveryDate}}</div></div>
+        <div class="card stat"><div class="label">Fastest delivery</div><div class="value">{{formatMinutes .Stats.ShortestDeliveryMinutes}}</div><div class="sub">{{.Stats.ShortestDeliveryRestaurant}} · {{formatDate .Stats.ShortestDeliveryDate}}</div></div>
+        <div class="card stat"><div class="label">Power hour</div><div class="value">{{.Stats.PeakHour}}:00</div><div class="sub">most orders placed</div></div>
+        <div class="card stat"><div class="label">Busiest day</div><div class="value">{{.Stats.MostOrdersInOneDay}} orders</div><div class="sub">{{.Stats.MostOrdersDate}}</div></div>
+        <div class="card stat"><div class="label">Biggest order</div><div class="value">{{formatMoney .Stats.BiggestOrderTotal $cur}}</div><div class="sub">{{.Stats.BiggestOrderRestaurant}}</div></div>
+        <div class="card stat"><div class="label">Busiest month</div><div class="value">{{monthName .Stats.BusiestMonth}}</div></div>
+        <div class="card stat"><div class="label">Longest streak</div><div class="value">{{.LongestStreak}} days</div><div class="sub">consecutive ordering days</div></div>
+        <div class="card stat"><div class="label">Late-night orders</div><div class="value">{{.Stats.LateNightOrders}}</div><div class="sub">placed 9pm–4am</div></div>
+        {{if gt .Stats.CreditOrderCount 0}}
+        <div class="card stat"><div class="label">Credits used</div><div class="value">{{formatMoney .Stats.TotalCreditsUsed $cur}}</div><div class="sub">across {{.Stats.CreditOrderCount}} orders</div></div>
+        {{end}}
+      </div>
+    </div>
+
+    <!-- Same driver -->
+    <div class="section">
+      <h2>Your drivers</h2>
+      <div class="card">
+        {{if .Stats.DriverDataAvailable}}
+        <p style="margin:0">
+          You had <strong>{{.Stats.UniqueDrivers}}</strong> different drivers.
+          {{if gt .Stats.RepeatDriverOrders 0}}
+          You got a repeat driver <strong>{{.Stats.RepeatDriverOrders}}</strong> time(s).
+          {{if .Stats.TopDriver}}Most frequent: <span class="pill">{{.Stats.TopDriver.Name}} · {{.Stats.TopDriver.OrderCount}} orders</span>{{end}}
+          {{else}}
+          You never had the same driver twice.
+          {{end}}
+        </p>
+        {{else}}
+        <p class="hint" style="margin:0">Driver identity isn't included in the order data, so "same driver" can't be computed.</p>
+        {{end}}
+      </div>
+    </div>
+
+    <!-- Top restaurants -->
+    <div class="section">
+      <h2>Top restaurants</h2>
+      <div class="card" style="padding:6px 6px">
+        <table>
+          <thead><tr><th style="width:40px"></th><th>Restaurant</th><th class="num">Orders</th><th class="num">Spent</th></tr></thead>
+          <tbody>
+            {{range $i, $r := .Stats.TopRestaurants}}
+            <tr>
+              <td><span class="rank">{{add $i 1}}</span></td>
+              <td>
+                {{if $r.ID}}<img src="/api/logo?r={{$r.ID}}" width="28" height="28" loading="lazy"
+                     style="border-radius:6px;vertical-align:middle;margin-right:10px;object-fit:cover"
+                     onerror="this.style.display='none'">{{end}}{{$r.Name}}
+              </td>
+              <td class="num">{{$r.OrderCount}}</td>
+              <td class="num">{{formatMoney $r.TotalSpent $cur}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Dishes + customisations -->
+    <div class="section">
+      <h2>What you ate</h2>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px">
+        <div class="card" style="padding:6px 6px">
+          <table>
+            <thead><tr><th>Top dishes</th><th class="num">Qty</th><th class="num">Spent</th></tr></thead>
+            <tbody>
+              {{range .Stats.TopDishes}}
+              <tr><td>{{.Name}}</td><td class="num">{{.Count}}</td><td class="num">{{formatMoney .TotalSpent $cur}}</td></tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+        <div class="card" style="padding:6px 6px">
+          <table>
+            <thead><tr><th>Top customisations</th><th class="num">Times</th></tr></thead>
+            <tbody>
+              {{range .Stats.TopModifiers}}
+              <tr><td>{{.Name}}</td><td class="num">{{.Count}}</td></tr>
+              {{else}}
+              <tr><td colspan="2" class="hint">No customisations recorded.</td></tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Where you order to -->
+    {{if .Stats.OrdersByAddress}}
+    <div class="section">
+      <h2>Where you order to</h2>
+      <div class="grid">
+        {{range $label, $count := .Stats.OrdersByAddress}}
+        <div class="card stat"><div class="label">{{$label}}</div><div class="value">{{$count}}</div><div class="sub">orders</div></div>
+        {{end}}
+      </div>
+    </div>
+    {{end}}
+
+    <!-- Charts -->
+    <div class="section">
+      <h2>When you ordered</h2>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px">
+        <div class="card"><div class="chart-wrap"><canvas id="monthChart"></canvas></div></div>
+        <div class="card"><div class="chart-wrap"><canvas id="dowChart"></canvas></div></div>
+      </div>
+    </div>
+
+    <!-- Map -->
+    <div class="section">
+      <h2>Order heatmap</h2>
+      <p class="hint" style="margin:-6px 0 12px">Weighted by order count. Restaurant locations once enriched; delivery locations until then.</p>
+      <div class="card"><div id="map"></div></div>
+    </div>
+
+    <script>
+      const STATS = {{ .Stats | json }};
+      const TEAL = "#00ccbc";
+      const SELECTED_YEAR = {{ .SelectedYear }};
+
+      function arrFromMonthMap(m) {
+        const out = [];
+        for (let i = 1; i <= 12; i++) out.push((m && m[i]) ? m[i] : 0);
+        return out;
+      }
+      const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+      const DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+      new Chart(document.getElementById("monthChart"), {
+        type: "bar",
+        data: { labels: MONTHS, datasets: [{ label: "Spend", data: arrFromMonthMap(STATS.spend_by_month), backgroundColor: TEAL }] },
+        options: { plugins: { legend: { display: false }, title: { display: true, text: "Spend by month" } }, scales: { y: { beginAtZero: true } } }
+      });
+
+      const dowData = [];
+      for (let i = 0; i < 7; i++) dowData.push((STATS.orders_by_day_of_week && STATS.orders_by_day_of_week[i]) || 0);
+      new Chart(document.getElementById("dowChart"), {
+        type: "bar",
+        data: { labels: DOW, datasets: [{ label: "Orders", data: dowData, backgroundColor: TEAL }] },
+        options: { plugins: { legend: { display: false }, title: { display: true, text: "Orders by day of week" } }, scales: { y: { beginAtZero: true } } }
+      });
+
+      // Delivery map
+      const map = L.map("map");
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+        attribution: "&copy; OpenStreetMap &copy; CARTO", maxZoom: 19
+      }).addTo(map);
+      const yq = SELECTED_YEAR === 0 ? "all" : SELECTED_YEAR;
+      fetch("/api/order-locations?year=" + yq).then(r => r.json()).then(points => {
+        if (!points || !points.length) { map.setView([51.5074, -0.1278], 12); return; }
+        const maxW = points.reduce((m, p) => Math.max(m, p.weight), 1);
+        const heat = points.map(p => [p.lat, p.lng, p.weight / maxW]);
+        L.heatLayer(heat, { radius: 35, blur: 25, maxZoom: 15,
+          gradient: { 0.2: "#00ccbc", 0.5: "#ffd23f", 1.0: "#ff6b6b" } }).addTo(map);
+        const bounds = points.map(p => [p.lat, p.lng]);
+        map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+      });
+    </script>
+    {{end}}
+  </div>
+</body>
+</html>
