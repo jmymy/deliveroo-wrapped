@@ -5,11 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Deliveroo Wrapped</title>
   <link rel="stylesheet" href="/static/css/app.css">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
+  <script src="https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js"
+          integrity="sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2XoQrxeTUQyRjrOnlCoYta87iKBWq3EsdM2" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"
+          integrity="sha384-JUh163oCRItcbPme8pYnROHQMC6fNKTBWtRG3I3I0erJkzNgL7uxKlNwcrcFKeqF" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"
+          integrity="sha384-mFKkGiGvT5vo1fEyGCD3hshDdKmW3wzXW/x+fWriYJArD0R3gawT6lMvLboM22c0" crossorigin="anonymous"></script>
 </head>
 <body>
   <div class="topbar">
@@ -62,11 +67,16 @@
     {{end}}
 
     <!-- Headline -->
+    {{$prev := .PrevStats}}{{$hasPrev := .HasPrev}}{{$prevYear := .PrevYear}}
     <div class="grid">
-      <div class="card stat"><div class="label">Total orders</div><div class="value">{{.Stats.TotalOrders}}</div><div class="sub">across {{.Stats.UniqueRestaurants}} restaurants</div></div>
-      <div class="card stat"><div class="label">Total spent</div><div class="value">{{formatMoney .Stats.TotalSpent $cur}}</div><div class="sub">{{formatMoney .Stats.AvgOrderTotal $cur}} avg / order</div></div>
-      <div class="card stat accent"><div class="label">Saved with Plus</div><div class="value">{{formatMoney .Stats.TotalPlusSavings $cur}}</div><div class="sub">on delivery & service fees</div></div>
-      <div class="card stat"><div class="label">Total tips</div><div class="value">{{formatMoney .Stats.TotalTips $cur}}</div><div class="sub">{{formatFloat .Stats.TippedOrderPct 0}}% of orders tipped</div></div>
+      <div class="card stat"><div class="label">Total orders</div><div class="value">{{.Stats.TotalOrders}}</div><div class="sub">across {{.Stats.UniqueRestaurants}} restaurants</div>
+        {{if $hasPrev}}<div class="delta {{deltaClass (toF .Stats.TotalOrders) (toF $prev.TotalOrders) true}}">{{signedInt .Stats.TotalOrders $prev.TotalOrders}} <span class="yr">vs {{$prevYear}}</span></div>{{end}}</div>
+      <div class="card stat"><div class="label">Total spent</div><div class="value">{{formatMoney .Stats.TotalSpent $cur}}</div><div class="sub">{{formatMoney .Stats.AvgOrderTotal $cur}} avg / order</div>
+        {{if $hasPrev}}<div class="delta {{deltaClass .Stats.TotalSpent $prev.TotalSpent false}}">{{signedMoney .Stats.TotalSpent $prev.TotalSpent $cur}} <span class="yr">vs {{$prevYear}}</span></div>{{end}}</div>
+      <div class="card stat accent"><div class="label">Saved with Plus</div><div class="value">{{formatMoney .Stats.TotalPlusSavings $cur}}</div><div class="sub">on delivery & service fees</div>
+        {{if $hasPrev}}<div class="delta {{deltaClass .Stats.TotalPlusSavings $prev.TotalPlusSavings true}}">{{signedMoney .Stats.TotalPlusSavings $prev.TotalPlusSavings $cur}} <span class="yr">vs {{$prevYear}}</span></div>{{end}}</div>
+      <div class="card stat"><div class="label">Total tips</div><div class="value">{{formatMoney .Stats.TotalTips $cur}}</div><div class="sub">{{formatFloat .Stats.TippedOrderPct 0}}% of orders tipped</div>
+        {{if $hasPrev}}<div class="delta {{deltaClass .Stats.TotalTips $prev.TotalTips false}}">{{signedMoney .Stats.TotalTips $prev.TotalTips $cur}} <span class="yr">vs {{$prevYear}}</span></div>{{end}}</div>
     </div>
 
     <!-- Plus economics -->

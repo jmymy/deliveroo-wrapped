@@ -105,3 +105,12 @@ label { display: block; font-weight: 600; margin: 16px 0 6px; }
 
 .pill { display: inline-block; background: rgba(0,204,188,0.12); color: var(--teal-dark);
   padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+
+.delta { display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 700;
+  padding: 2px 8px; border-radius: 999px; }
+.delta .yr { color: var(--muted); font-weight: 600; }
+.delta.up { background: rgba(6,214,160,0.14); color: #04936e; }
+.delta.down { background: rgba(255,107,107,0.14); color: #d64545; }
+.delta.flat { background: var(--line); color: var(--muted); }
+.stat.accent .delta.up, .stat.accent .delta.down, .stat.accent .delta.flat {
+  background: rgba(255,255,255,0.2); color: #fff; }

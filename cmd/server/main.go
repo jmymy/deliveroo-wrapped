@@ -267,6 +267,39 @@ func funcMap() template.FuncMap {
 			return template.JS(b)
 		},
 		"add": func(a, b int) int { return a + b },
+		"toF": func(i int) float64 { return float64(i) },
+		// Year-over-year deltas (current vs previous).
+		"signedInt": func(cur, prev int) string {
+			d := cur - prev
+			if d > 0 {
+				return fmt.Sprintf("+%d", d)
+			}
+			return fmt.Sprintf("%d", d)
+		},
+		"signedMoney": func(cur, prev float64, currency string) string {
+			d := cur - prev
+			sign := "+"
+			if d < 0 {
+				sign = "-"
+				d = -d
+			}
+			return sign + formatMoney(d, currency)
+		},
+		// deltaClass returns up/down/flat for coloring. higherIsBetter flips the
+		// semantics (e.g. spending more isn't "good", so pass false there).
+		"deltaClass": func(cur, prev float64, higherIsBetter bool) string {
+			if cur == prev {
+				return "flat"
+			}
+			up := cur > prev
+			if !higherIsBetter {
+				up = !up
+			}
+			if up {
+				return "up"
+			}
+			return "down"
+		},
 	}
 }
 
@@ -319,9 +352,25 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	yearStats := stats.Calculate(orders, year, s.data.PlusMonthlyCost)
 	longestStreak, currentStreak, _ := stats.GetStreakDays(orders)
 
+	// Year-over-year comparison: when a specific year is selected and the prior
+	// year has data, compute its stats so the dashboard can show deltas.
+	var prevStats *models.YearlyStats
+	prevYear := year - 1
+	if year != 0 {
+		for _, y := range s.store.GetAvailableYears(s.data) {
+			if y == prevYear {
+				prevStats = stats.Calculate(s.ordersForYear(prevYear), prevYear, s.data.PlusMonthlyCost)
+				break
+			}
+		}
+	}
+
 	data := map[string]interface{}{
 		"Auth":           s.auth,
 		"Stats":          yearStats,
+		"PrevStats":      prevStats,
+		"PrevYear":       prevYear,
+		"HasPrev":        prevStats != nil,
 		"UserName":       s.data.UserName,
 		"PlusTier":       s.data.PlusTier,
 		"TotalOrdersDB":  len(s.data.Orders),
