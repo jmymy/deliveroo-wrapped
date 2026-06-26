@@ -197,6 +197,8 @@ type RestaurantLeaderboardEntry struct {
 	TotalSpent float64   `json:"total_spent"`
 	FirstOrder time.Time `json:"first_order"`
 	LastOrder  time.Time `json:"last_order"`
+	Lat        float64   `json:"lat"` // from enriched detail; 0 until enriched
+	Lng        float64   `json:"lng"`
 }
 
 // DriverLeaderboardEntry aggregates orders for one driver.
@@ -350,6 +352,12 @@ type YearlyStats struct {
 
 	// Top customisations (item modifiers)
 	TopModifiers []DishEntry `json:"top_modifiers"`
+
+	// Restaurant distance (home → restaurant, enriched orders only)
+	AvgRestaurantDistanceMi float64 `json:"avg_restaurant_distance_mi"`
+	FarthestRestaurantMi    float64 `json:"farthest_restaurant_mi"`
+	FarthestRestaurantName  string  `json:"farthest_restaurant_name"`
+	DistanceSampleCount     int     `json:"distance_sample_count"`
 
 	// Leaderboards
 	TopRestaurants []RestaurantLeaderboardEntry `json:"top_restaurants"`

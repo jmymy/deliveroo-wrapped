@@ -118,6 +118,20 @@
       </div>
     </article>
 
+    <article class="card col-8">
+      <h3>Where your food comes from</h3><div class="sub">Your top kitchens on the map{{if gt .Stats.DistanceSampleCount 0}} · {{printf "%.1f" .Stats.AvgRestaurantDistanceMi}} mi average hop{{end}}</div>
+      <div id="rmap" style="height:340px;border-radius:14px;overflow:hidden;margin-top:8px"></div>
+    </article>
+
+    <article class="card col-4">
+      <h3>Delivery distance</h3><div class="sub">Home → kitchen, as the crow flies</div>
+      {{if gt .Stats.DistanceSampleCount 0}}
+      <div class="kpi" style="margin-top:6px"><span class="v num" data-count="{{printf "%.1f" .Stats.AvgRestaurantDistanceMi}}" data-dp="1" data-suffix=" mi">{{printf "%.1f" .Stats.AvgRestaurantDistanceMi}} mi</span><span class="l">average distance to your food</span></div>
+      <div class="chip-row" style="margin-top:10px"><span class="chip">🛵 Farthest <b>{{printf "%.1f" .Stats.FarthestRestaurantMi}} mi · {{.Stats.FarthestRestaurantName}}</b></span></div>
+      <div style="opacity:.5;font-size:.78rem;margin-top:8px">from {{.Stats.DistanceSampleCount}} enriched orders</div>
+      {{else}}<div class="kpi" style="margin-top:6px"><span class="v num">—</span><span class="l">enriching restaurant locations…</span></div>{{end}}
+    </article>
+
     <article class="card col-4">
       <h3>Delivery speed</h3><div class="sub">Average door-to-door</div>
       {{if gt .Stats.DeliverySampleCount 0}}
@@ -299,6 +313,22 @@ const ROO = {{ .ViewModel | json }};
       setTimeout(function () { map.invalidateSize(); }, 300);
     } else if (mapEl) {
       mapEl.style.display = "none";
+    }
+
+    var rst = (ROO.restaurants || []).filter(function (d) { return d.lat || d.lng; });
+    var rEl = document.getElementById("rmap");
+    if (rEl && rst.length) {
+      var rmap = L.map("rmap", { scrollWheelZoom: false });
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", { attribution: "© OpenStreetMap, © CARTO", maxZoom: 19 }).addTo(rmap);
+      var rbounds = [];
+      rst.forEach(function (d) {
+        L.circleMarker([d.lat, d.lng], { radius: 6 + Math.min(12, d.count / 3), color: "#FF5E5B", fillColor: "#FF5E5B", fillOpacity: .6, weight: 2 }).addTo(rmap).bindPopup("<b>" + esc(d.name) + "</b><br>" + d.count + " orders");
+        rbounds.push([d.lat, d.lng]);
+      });
+      rmap.fitBounds(rbounds, { padding: [30, 30], maxZoom: 14 });
+      setTimeout(function () { rmap.invalidateSize(); }, 300);
+    } else if (rEl) {
+      rEl.style.display = "none";
     }
   }
 })();

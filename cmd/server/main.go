@@ -468,6 +468,16 @@ type viewModel struct {
 	OrdersByHour    [24]int               `json:"ordersByHour"` // 0..23
 	ValueBuckets    []models.ValueBucket  `json:"valueBuckets"`
 	Destinations    []models.AddressEntry `json:"destinations"`
+	Restaurants     []restPoint           `json:"restaurants"`
+}
+
+// restPoint is a restaurant location for the "where your food comes from" map
+// (only restaurants whose coords have been filled in by enrichment).
+type restPoint struct {
+	Name  string  `json:"name"`
+	Lat   float64 `json:"lat"`
+	Lng   float64 `json:"lng"`
+	Count int     `json:"count"`
 }
 
 func buildViewModel(st *models.YearlyStats) viewModel {
@@ -487,6 +497,11 @@ func buildViewModel(st *models.YearlyStats) viewModel {
 	}
 	vm.ValueBuckets = st.OrderValueBuckets
 	vm.Destinations = st.TopAddresses
+	for _, r := range st.TopRestaurants {
+		if r.Lat != 0 || r.Lng != 0 {
+			vm.Restaurants = append(vm.Restaurants, restPoint{Name: r.Name, Lat: r.Lat, Lng: r.Lng, Count: r.OrderCount})
+		}
+	}
 	return vm
 }
 

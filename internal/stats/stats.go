@@ -1,11 +1,24 @@
 package stats
 
 import (
+	"math"
 	"sort"
 	"time"
 
 	"deliveroo-wrapped/internal/models"
 )
+
+// haversineMi returns the great-circle distance in miles between two lat/lng
+// points. Used for home→restaurant distance on enriched orders.
+func haversineMi(lat1, lng1, lat2, lng2 float64) float64 {
+	const earthMi = 3958.7613
+	rad := math.Pi / 180
+	dLat := (lat2 - lat1) * rad
+	dLng := (lng2 - lng1) * rad
+	a := math.Sin(dLat/2)*math.Sin(dLat/2) +
+		math.Cos(lat1*rad)*math.Cos(lat2*rad)*math.Sin(dLng/2)*math.Sin(dLng/2)
+	return earthMi * 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
+}
 
 // orderValueBands defines the histogram bands for the order-value distribution.
 // Labels are currency-agnostic ranges; the template adds the currency context.
@@ -65,6 +78,8 @@ func Calculate(orders []models.StoredOrder, year int, plusMonthlyCost float64) *
 	valueCounts := make([]int, len(orderValueBands))
 	loc := models.OrderLocation()
 	var firstDate, lastDate time.Time
+	var distSum float64
+	var distCount int
 
 	for _, o := range orders {
 		// Bucket by the order's local market time, not the stored UTC instant,
@@ -207,6 +222,17 @@ func Calculate(orders []models.StoredOrder, year int, plusMonthlyCost float64) *
 			st.BiggestOrderRestaurant = o.RestaurantName
 			st.BiggestOrderDate = o.PlacedAt
 		}
+
+		// Home → restaurant distance (enriched orders carry restaurant coords).
+		if o.RestaurantLat != 0 && o.DeliveryLat != 0 {
+			d := haversineMi(o.DeliveryLat, o.DeliveryLng, o.RestaurantLat, o.RestaurantLng)
+			distSum += d
+			distCount++
+			if d > st.FarthestRestaurantMi {
+				st.FarthestRestaurantMi = d
+				st.FarthestRestaurantName = o.RestaurantName
+			}
+		}
 	}
 
 	if st.ShortestDeliveryMinutes < 0 {
@@ -234,6 +260,10 @@ func Calculate(orders []models.StoredOrder, year int, plusMonthlyCost float64) *
 	st.DeliverySampleCount = deliveryCount
 	if deliveryCount > 0 {
 		st.AvgDeliveryMinutes = float64(totalDeliverySec) / float64(deliveryCount) / 60.0
+	}
+	st.DistanceSampleCount = distCount
+	if distCount > 0 {
+		st.AvgRestaurantDistanceMi = distSum / float64(distCount)
 	}
 
 	// Plus ROI: subscription cost ~ monthly price * distinct active months.
@@ -337,6 +367,10 @@ func CalculateRestaurantStats(orders []models.StoredOrder, year int) ([]models.R
 		}
 		if e.ID == "" {
 			e.ID = o.RestaurantID
+		}
+		if e.Lat == 0 && o.RestaurantLat != 0 { // from an enriched order
+			e.Lat = o.RestaurantLat
+			e.Lng = o.RestaurantLng
 		}
 		e.OrderCount++
 		e.TotalSpent += o.Total
