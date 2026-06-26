@@ -283,6 +283,8 @@ func funcMap() template.FuncMap {
 			if d < 0 {
 				sign = "-"
 				d = -d
+			} else if d == 0 {
+				sign = ""
 			}
 			return sign + formatMoney(d, currency)
 		},
@@ -371,7 +373,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		"Stats":          yearStats,
 		"PrevStats":      prevStats,
 		"PrevYear":       prevYear,
-		"HasPrev":        prevStats != nil,
+		"HasPrev":        prevStats != nil && prevStats.TotalOrders > 0,
 		"UserName":       s.data.UserName,
 		"PlusTier":       s.data.PlusTier,
 		"TotalOrdersDB":  len(s.data.Orders),
@@ -379,7 +381,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		"LongestStreak":  longestStreak,
 		"CurrentStreak":  currentStreak,
 		"SlowestOrders":  stats.GetTopOrdersByDuration(orders, 5),
-		"HasData":        len(orders) > 0,
+		"HasData":        yearStats.TotalOrders > 0,
 		"SyncInProgress": s.syncInProgress,
 		"SelectedYear":   year,
 		"AvailableYears": s.store.GetAvailableYears(s.data),
@@ -413,7 +415,7 @@ func (s *Server) handleShare(w http.ResponseWriter, r *http.Request) {
 		"UserName":       s.data.UserName,
 		"PlusTier":       s.data.PlusTier,
 		"TopRestaurant":  topRestaurant,
-		"HasData":        len(orders) > 0,
+		"HasData":        yearStats.TotalOrders > 0,
 		"SelectedYear":   year,
 		"AvailableYears": s.store.GetAvailableYears(s.data),
 	}
