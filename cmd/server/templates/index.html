@@ -21,6 +21,7 @@
     <div class="brand">Deliveroo <span>Wrapped</span></div>
     <div>
       <a href="/">Dashboard</a>
+      <a href="/share?year={{if eq .SelectedYear 0}}all{{else}}{{.SelectedYear}}{{end}}">Share</a>
       <a href="/auth">Connect</a>
       {{if .Auth.LoggedIn}}<a href="#" hx-post="/api/logout">Log out</a>{{end}}
     </div>

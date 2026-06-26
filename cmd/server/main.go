@@ -129,6 +129,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("/static/", http.FileServer(http.FS(staticFS)))
 	mux.HandleFunc("/", server.handleIndex)
+	mux.HandleFunc("/share", server.handleShare)
 	mux.HandleFunc("/auth", server.handleAuth)
 	mux.HandleFunc("/api/manual-auth", server.handleManualAuth)
 	mux.HandleFunc("/api/logout", server.handleLogout)
@@ -390,6 +391,33 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	s.renderTemplate(w, "auth.html", map[string]interface{}{"Auth": s.auth})
+}
+
+// handleShare renders screenshot-ready, on-brand summary cards for sharing.
+func (s *Server) handleShare(w http.ResponseWriter, r *http.Request) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	year := s.yearFromQuery(r)
+	orders := s.ordersForYear(year)
+	yearStats := stats.Calculate(orders, year, s.data.PlusMonthlyCost)
+
+	var topRestaurant *models.RestaurantLeaderboardEntry
+	if len(yearStats.TopRestaurants) > 0 {
+		topRestaurant = &yearStats.TopRestaurants[0]
+	}
+
+	data := map[string]interface{}{
+		"Auth":           s.auth,
+		"Stats":          yearStats,
+		"UserName":       s.data.UserName,
+		"PlusTier":       s.data.PlusTier,
+		"TopRestaurant":  topRestaurant,
+		"HasData":        len(orders) > 0,
+		"SelectedYear":   year,
+		"AvailableYears": s.store.GetAvailableYears(s.data),
+	}
+	s.renderTemplate(w, "share.html", data)
 }
 
 // handleManualAuth accepts a pasted "Copy as cURL" command (or a raw header
