@@ -257,7 +257,7 @@ func maxInt(a, b int) int {
 func (s *Storage) GetOrdersForYear(store *models.DataStore, year int) []models.StoredOrder {
 	var orders []models.StoredOrder
 	for _, o := range store.Orders {
-		if o.PlacedAt.Year() == year {
+		if o.PlacedAt.In(models.OrderLocation()).Year() == year {
 			orders = append(orders, o)
 		}
 	}
@@ -268,7 +268,7 @@ func (s *Storage) GetOrdersForYear(store *models.DataStore, year int) []models.S
 func (s *Storage) GetAvailableYears(store *models.DataStore) []int {
 	yearMap := make(map[int]bool)
 	for _, o := range store.Orders {
-		y := o.PlacedAt.Year()
+		y := o.PlacedAt.In(models.OrderLocation()).Year()
 		if y > 2000 {
 			yearMap[y] = true
 		}

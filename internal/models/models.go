@@ -272,8 +272,9 @@ type YearlyStats struct {
 	Currency string `json:"currency"`
 
 	// Counts
-	TotalOrders       int `json:"total_orders"`
-	UniqueRestaurants int `json:"unique_restaurants"`
+	TotalOrders       int     `json:"total_orders"`
+	UniqueRestaurants int     `json:"unique_restaurants"`
+	AvgOrdersPerWeek  float64 `json:"avg_orders_per_week"` // over the active span
 
 	// Money
 	TotalSpent        float64 `json:"total_spent"`
@@ -297,6 +298,7 @@ type YearlyStats struct {
 	PlusNetBenefit       float64 `json:"plus_net_benefit"`
 
 	// Delivery time (minutes)
+	DeliverySampleCount        int       `json:"delivery_sample_count"` // orders with a duration; 0 → hide
 	AvgDeliveryMinutes         float64   `json:"avg_delivery_minutes"`
 	LongestDeliveryMinutes     float64   `json:"longest_delivery_minutes"`
 	LongestDeliveryDate        time.Time `json:"longest_delivery_date"`

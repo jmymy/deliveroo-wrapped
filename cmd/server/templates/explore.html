@@ -120,12 +120,14 @@
 
     <article class="card col-4">
       <h3>Delivery speed</h3><div class="sub">Average door-to-door</div>
+      {{if gt .Stats.DeliverySampleCount 0}}
       <div class="kpi" style="margin:6px 0 16px"><span class="v num" data-count="{{printf "%.0f" .Stats.AvgDeliveryMinutes}}" data-suffix=" min">{{printf "%.0f" .Stats.AvgDeliveryMinutes}}</span></div>
       <div class="chip-row">
         <span class="chip">⚡ Fastest <b>{{printf "%.0f" .Stats.ShortestDeliveryMinutes}} min · {{.Stats.ShortestDeliveryRestaurant}}</b></span>
         <span class="chip">🐌 Longest <b>{{printf "%.0f" .Stats.LongestDeliveryMinutes}} min · {{.Stats.LongestDeliveryRestaurant}}</b></span>
-        <span class="chip">🎯 Beat ETA <b>{{formatFloat .Stats.EtaBeatenPct 0}}%</b></span>
+        {{if gt .Stats.EtaSampleCount 0}}<span class="chip">🎯 Beat ETA <b>{{formatFloat .Stats.EtaBeatenPct 0}}%</b></span>{{end}}
       </div>
+      {{else}}<div class="kpi" style="margin:6px 0 16px"><span class="v num">—</span><span class="l">no delivery-time data</span></div>{{end}}
     </article>
 
     <article class="card col-4">
@@ -193,8 +195,8 @@
     <article class="card col-12" style="background:linear-gradient(120deg,#FFB40022,#7B61FF18)">
       <h3>Records of the year</h3><div class="sub">Personal bests (and one personal worst)</div>
       <div class="grid" style="margin-top:8px;gap:14px">
-        <div class="col-3"><div class="kpi"><span class="v num">{{dayMonth .Stats.MostOrdersDate}}</span><span class="l">busiest day · {{.Stats.MostOrdersInOneDay}} orders</span></div></div>
-        <div class="col-3"><div class="kpi"><span class="v num">{{monthName .Stats.BusiestMonth}}</span><span class="l">busiest month</span></div></div>
+        <div class="col-3"><div class="kpi"><span class="v num">{{if gt .Stats.MostOrdersInOneDay 0}}{{dayMonth .Stats.MostOrdersDate}}{{else}}—{{end}}</span><span class="l">busiest day · {{.Stats.MostOrdersInOneDay}} orders</span></div></div>
+        <div class="col-3"><div class="kpi"><span class="v num">{{if gt .Stats.TotalOrders 0}}{{monthName .Stats.BusiestMonth}}{{else}}—{{end}}</span><span class="l">busiest month</span></div></div>
         <div class="col-3"><div class="kpi"><span class="v num" data-count="{{printf "%.2f" .Stats.BiggestOrderTotal}}" data-dp="2" data-prefix="£">{{formatMoney .Stats.BiggestOrderTotal $cur}}</span><span class="l">biggest order</span></div></div>
         <div class="col-3"><div class="kpi"><span class="v num">{{.Stats.BiggestOrderRestaurant}}</span><span class="l">that one big night</span></div></div>
       </div>
