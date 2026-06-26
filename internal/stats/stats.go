@@ -228,7 +228,7 @@ func Calculate(orders []models.StoredOrder, year int, plusMonthlyCost float64) *
 			d := haversineMi(o.DeliveryLat, o.DeliveryLng, o.RestaurantLat, o.RestaurantLng)
 			distSum += d
 			distCount++
-			if d > st.FarthestRestaurantMi {
+			if distCount == 1 || d > st.FarthestRestaurantMi { // set name on first sample too
 				st.FarthestRestaurantMi = d
 				st.FarthestRestaurantName = o.RestaurantName
 			}
