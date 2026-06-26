@@ -561,7 +561,7 @@ func CalculateDishInflation(orders []models.StoredOrder) []models.DishInflationE
 	const (
 		minOrders   = 6
 		minSpanDays = 180
-		maxEntries  = 8
+		maxEntries  = 100 // safety cap; the UI list is scrollable
 	)
 	type occ struct {
 		t     time.Time
