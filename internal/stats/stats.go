@@ -299,7 +299,7 @@ func Calculate(orders []models.StoredOrder, year int, plusMonthlyCost float64) *
 	if year != 0 {
 		streakInput = make([]models.StoredOrder, 0, len(orders))
 		for _, o := range orders {
-			if o.PlacedAt.Year() == year {
+			if o.PlacedAt.In(models.OrderLocation()).Year() == year {
 				streakInput = append(streakInput, o)
 			}
 		}
