@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Your Wrapped Story · Deliveroo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/static/css/wrapped.css" />
+</head>
+<body class="story">
+{{- $yq := "all"}}{{if ne .SelectedYear 0}}{{$yq = printf "%d" .SelectedYear}}{{end}}
+{{- $yearLabel := "All-time"}}{{if ne .SelectedYear 0}}{{$yearLabel = $yq}}{{end}}
+{{- $cur := .Stats.Currency}}
+{{- $rests := .Stats.TopRestaurants}}
+{{- $addr := .Stats.TopAddresses}}
+{{- $mods := .Stats.TopModifiers}}
+
+<canvas id="confetti" aria-hidden="true"></canvas>
+<div class="story-prog" aria-hidden="true"></div>
+<div class="story-dots" role="navigation" aria-label="Story scenes"></div>
+
+<header class="topbar on-dark">
+  <a class="brand" href="/?year={{$yq}}"><span class="roo">🦘</span><span>Wrapped <small>Deliveroo</small></span></a>
+  <nav class="topnav"><a href="/explore?year={{$yq}}">Skip to Explore →</a></nav>
+</header>
+
+<div class="scenes">
+
+  <section class="scene bg-ink in" data-scene="1">
+    <span class="scene-num">01 / 09</span>
+    <span class="floaty float-anim" data-parallax="40" style="width:220px;height:220px;background:var(--teal);top:8%;right:6%"></span>
+    <span class="floaty float-anim" data-parallax="-30" style="width:120px;height:120px;background:var(--violet);bottom:14%;left:8%;animation-delay:1.5s"></span>
+    <div class="inner">
+      <p class="eyebrow reveal">Deliveroo Wrapped · {{$yearLabel}}</p>
+      <h1 class="kinetic-mid reveal d1">A year of<br />very good<br />decisions.<sup style="font-size:.4em">*</sup></h1>
+      <p class="lede reveal d2" style="margin-top:22px">Buckle up{{if .UserName}}, {{.UserName}}{{end}}. We counted everything.<br /><span style="opacity:.6;font-size:.8em">*some debatable, all delicious.</span></p>
+    </div>
+    <div class="scene-hint"><span>scroll / tap space</span><span class="chev">↓</span></div>
+  </section>
+
+  <section class="scene bg-teal" data-scene="2">
+    <span class="scene-num">02 / 09</span>
+    <div class="inner">
+      <p class="eyebrow reveal">This year you ordered</p>
+      <h2 class="stat-hero kinetic-big reveal d1">
+        <span class="num" data-count="{{.Stats.TotalOrders}}">0</span>
+        <span class="unit">times</span>
+      </h2>
+      <p class="lede reveal d2" style="margin-top:18px">
+        That's <b>{{formatFloat (divf (toF .Stats.TotalOrders) 52.0) 1}}</b> a week. You spent
+        <b class="num" data-count="{{printf "%.0f" .Stats.TotalSpent}}" data-prefix="£">£0</b>
+        across <b class="num" data-count="{{.Stats.UniqueRestaurants}}">0</b> different kitchens —
+        averaging <b>{{formatMoney .Stats.AvgOrderTotal $cur}}</b> a go.
+      </p>
+    </div>
+    <div class="scene-hint"><span class="chev">↓</span></div>
+  </section>
+
+  <section class="scene bg-ink" data-scene="3">
+    <span class="scene-num">03 / 09</span>
+    <div class="inner">
+      <p class="eyebrow reveal">Your hall of fame</p>
+      <h2 class="kinetic-mid reveal d1">{{if gt (len $rests) 6}}6{{else}}{{len $rests}}{{end}} kitchens<br />did the heavy lifting.</h2>
+      <ol class="leaderboard reveal d2" id="story-lb">
+        {{range $i, $r := $rests}}{{if lt $i 6}}
+        <li class="lb-row">
+          <span class="lb-rank">{{add $i 1}}</span>
+          <span class="lb-mono" style="background:{{restColor $i}};position:relative;overflow:hidden">{{monogram $r.Name}}{{if $r.ID}}<img src="/api/logo?r={{$r.ID}}" alt="" loading="lazy" onerror="this.remove()" style="position:absolute;inset:0;width:100%;height:100%;border-radius:inherit;object-fit:cover">{{end}}</span>
+          <span class="lb-name">{{$r.Name}}</span>
+          <span class="lb-meta">{{$r.OrderCount}}× <span>{{formatMoney $r.TotalSpent $cur}}</span></span>
+        </li>
+        {{end}}{{end}}
+      </ol>
+    </div>
+    <div class="scene-hint"><span class="chev">↓</span></div>
+  </section>
+
+  <section class="scene bg-violet" data-scene="4">
+    <span class="scene-num">04 / 09</span>
+    <div class="inner">
+      <p class="eyebrow reveal">The big question{{if .PlusTier}} · Plus {{.PlusTier}}{{end}}</p>
+      <h2 class="kinetic-mid reveal d1">Was Plus<br />worth it?</h2>
+      <div class="gauge reveal d2">
+        <div class="ring" id="roi-ring">
+          <b><span class="num" data-count="{{printf "%.1f" .Stats.PlusROI}}" data-dp="1">0</span>×</b>
+        </div>
+        <div>
+          <p class="lede" style="margin-bottom:14px">You paid about <b>{{formatMoney .Stats.PlusSubscriptionCost $cur}}</b> and saved
+            <b class="num" data-count="{{printf "%.0f" .Stats.TotalPlusSavings}}" data-prefix="£">£0</b> in fees.</p>
+          <span class="verdict">💸 Net win: {{if ge .Stats.PlusNetBenefit 0.0}}+{{end}}{{formatMoney .Stats.PlusNetBenefit $cur}}</span>
+        </div>
+      </div>
+    </div>
+    <div class="scene-hint"><span class="chev">↓</span></div>
+  </section>
+
+  <section class="scene bg-coral" data-scene="5">
+    <span class="scene-num">05 / 09</span>
+    <div class="inner">
+      <p class="eyebrow reveal">Need for speed</p>
+      <h2 class="kinetic-mid reveal d1">Food showed up in<br /><span class="num" data-count="{{printf "%.0f" .Stats.AvgDeliveryMinutes}}">0</span> minutes flat.</h2>
+      <p class="lede reveal d2" style="margin-top:18px">
+        We beat our own ETA <b class="num" data-count="{{printf "%.0f" .Stats.EtaBeatenPct}}" data-suffix="%">0%</b> of the time —
+        about <b>{{formatFloat (absf .Stats.AvgVsEtaMinutes) 0}} min</b> early on average.
+      </p>
+      <div class="chip-row reveal d3" style="margin-top:24px">
+        <span class="chip" style="background:rgba(255,255,255,.18);color:#fff">⚡ Fastest <b style="color:#fff">{{printf "%.0f" .Stats.ShortestDeliveryMinutes}} min</b> · {{.Stats.ShortestDeliveryRestaurant}}</span>
+        <span class="chip" style="background:rgba(255,255,255,.18);color:#fff">🐌 Longest <b style="color:#fff">{{printf "%.0f" .Stats.LongestDeliveryMinutes}} min</b> · {{.Stats.LongestDeliveryRestaurant}}</span>
+      </div>
+    </div>
+    <div class="scene-hint"><span class="chev">↓</span></div>
+  </section>
+
+  <section class="scene bg-amber" data-scene="6">
+    <span class="scene-num">06 / 09</span>
+    <span class="floaty float-anim" data-parallax="30" style="width:160px;height:160px;background:#fff;opacity:.25;top:12%;right:10%"></span>
+    <div class="inner">
+      <p class="eyebrow reveal">Creature of habit</p>
+      <h2 class="kinetic-mid reveal d1">You're an<br /><span class="num" data-count="{{.Stats.PeakHour}}" data-suffix=":00">0:00</span> kind of person.</h2>
+      <p class="lede reveal d2" style="margin-top:16px">A certified brunch orderer.{{if ge (len $addr) 2}} And it lands almost evenly in two places:{{end}}</p>
+      {{if $addr}}
+      <div class="dest-split reveal d3" style="margin-top:20px;max-width:640px">
+        {{range $i, $d := $addr}}{{if lt $i 2}}
+        <div class="dest" style="background:rgba(255,255,255,.45)">
+          <div class="v">{{$d.Count}}</div>
+          <div style="font-weight:700">{{$d.Name}}</div>
+        </div>
+        {{end}}{{end}}
+      </div>
+      {{end}}
+    </div>
+    <div class="scene-hint"><span class="chev">↓</span></div>
+  </section>
+
+  <section class="scene bg-orange" data-scene="7">
+    <span class="scene-num">07 / 09</span>
+    <div class="inner">
+      {{if $mods}}
+      <p class="eyebrow reveal">Your signature move</p>
+      <h2 class="kinetic-big reveal d1" style="font-size:clamp(3rem,13vw,9rem)">{{(index $mods 0).Name}}.</h2>
+      <p class="lede reveal d2" style="margin-top:10px">You added it <b class="num" data-count="{{(index $mods 0).Count}}" data-suffix="×">0</b> times. The kitchen knows. 🌶️</p>
+      {{if ge (len $mods) 3}}
+      <p class="lede reveal d3" style="margin-top:10px;opacity:.8">Closely followed by <b>{{(index $mods 1).Name}} ×{{(index $mods 1).Count}}</b> and <b>{{(index $mods 2).Name}} ×{{(index $mods 2).Count}}</b>.</p>
+      {{end}}
+      {{else}}
+      <p class="eyebrow reveal">Your signature move</p>
+      <h2 class="kinetic-mid reveal d1">Keeping it<br />classic.</h2>
+      {{end}}
+    </div>
+    <div class="scene-hint"><span class="chev">↓</span></div>
+  </section>
+
+  <section class="scene bg-ink" data-scene="8" data-finale="1">
+    <span class="scene-num">08 / 09</span>
+    <span class="floaty float-anim" data-parallax="50" style="width:200px;height:200px;background:var(--teal);top:10%;left:5%"></span>
+    <span class="floaty float-anim" data-parallax="-40" style="width:140px;height:140px;background:var(--coral);bottom:12%;right:8%;animation-delay:1s"></span>
+    <div class="inner" style="text-align:center;margin:0 auto">
+      <p class="eyebrow reveal">That's a wrap</p>
+      <h2 class="kinetic-big reveal d1">{{.Stats.TotalOrders}} orders.<br />Zero regrets.</h2>
+      {{if .HasPrev}}
+      <p class="lede reveal d2" style="margin:18px auto 0;max-width:560px">
+        You out-ordered {{.PrevYear}} by <b>{{signedInt .Stats.TotalOrders .PrevStats.TotalOrders}}</b>,
+        spent <b>{{signedMoney .Stats.TotalSpent .PrevStats.TotalSpent $cur}}</b> more, and still came out ahead with Plus.
+        Iconic.
+      </p>
+      {{else}}
+      <p class="lede reveal d2" style="margin:18px auto 0;max-width:560px">A genuinely indulgent year, and we're not sorry. Iconic.</p>
+      {{end}}
+    </div>
+    <div class="scene-hint"><span class="chev">↓</span></div>
+  </section>
+
+  <section class="scene bg-paper" data-scene="9">
+    <span class="scene-num">09 / 09</span>
+    <div class="inner" style="text-align:center;margin:0 auto">
+      <p class="eyebrow reveal">One last thing</p>
+      <h2 class="kinetic-mid reveal d1">Show it off.</h2>
+      <p class="lede reveal d2" style="margin:14px auto 0;max-width:480px;opacity:.8">Your brag cards are ready — square for the grid, 9:16 for the story.</p>
+      <div class="reveal d3" style="margin-top:28px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+        <a class="scene-cta" href="/cards?year={{$yq}}">📸 Get my share cards</a>
+        <a class="scene-cta" href="/explore?year={{$yq}}" style="background:var(--ink);color:#fff">📊 Explore every stat</a>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script src="/static/js/wrapped.js"></script>
+<script>
+/* ROI ring conic gradient (cap at 3x = full) */
+(function () {
+  var ring = document.getElementById("roi-ring");
+  if (!ring) return;
+  var roi = {{.Stats.PlusROI}};
+  var pct = Math.min(roi / 3, 1) * 100;
+  ring.style.background = "conic-gradient(#fff " + pct + "%, rgba(255,255,255,.22) 0)";
+  ring.style.borderRadius = "50%";
+  ring.style.padding = "0";
+  ring.innerHTML = '<span style="position:absolute;inset:14px;border-radius:50%;background:#5a43cf;display:grid;place-items:center">' + ring.innerHTML + '</span>';
+})();
+</script>
+</body>
+</html>

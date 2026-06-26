@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Deliveroo Wrapped{{if .UserName}} · {{.UserName}}{{end}}</title>
+<meta name="description" content="Your year in takeaways. Deliveroo Wrapped." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/static/css/wrapped.css" />
+</head>
+<body>
+{{- $yq := "all"}}{{if ne .SelectedYear 0}}{{$yq = printf "%d" .SelectedYear}}{{end}}
+{{- $yearLabel := "All-time"}}{{if ne .SelectedYear 0}}{{$yearLabel = $yq}}{{end}}
+{{- $cur := .Stats.Currency}}
+
+<header class="topbar">
+  <a class="brand" href="/?year={{$yq}}"><span class="roo">🦘</span><span>Wrapped <small>Deliveroo</small></span></a>
+  <nav class="topnav" aria-label="Primary">
+    <a href="/?year={{$yq}}" class="active">Home</a>
+    <a href="/story?year={{$yq}}">Story</a>
+    <a href="/explore?year={{$yq}}">Explore</a>
+    <a href="/cards?year={{$yq}}">Share</a>
+  </nav>
+</header>
+
+<main class="hub">
+  <div class="hub-inner">
+    <span class="kicker"><span class="dot"></span> {{$yearLabel}}{{if .PlusTier}} · Plus {{.PlusTier}}{{end}}</span>
+
+    <h1 class="display">
+      Hey {{if .UserName}}{{.UserName}}{{else}}there{{end}},<br />
+      here's your <span class="stroke">takeaway</span> year.
+    </h1>
+
+    <p class="sub">
+      {{.Stats.TotalOrders}} orders. {{.Stats.UniqueRestaurants}} restaurants.
+      {{formatMoney .Stats.TotalSpent $cur}} of pure, unbothered convenience. Let's relive it.
+    </p>
+
+    <div class="hub-cards">
+      <a class="hub-card story" href="/story?year={{$yq}}">
+        <span class="blob" style="background:var(--teal)"></span>
+        <span class="tag">▶</span>
+        <div>
+          <div class="big">Play your<br />Wrapped Story</div>
+          <p>Nine scenes. Big numbers. Confetti.</p>
+        </div>
+        <span class="go">Start the show →</span>
+      </a>
+
+      <a class="hub-card" href="/explore?year={{$yq}}">
+        <span class="blob" style="background:var(--violet)"></span>
+        <span class="tag">📊</span>
+        <div>
+          <div class="big">Explore every<br />single stat</div>
+          <p>Leaderboards, charts, your delivery map.</p>
+        </div>
+        <span class="go">Dig in →</span>
+      </a>
+
+      <a class="hub-card" href="/cards?year={{$yq}}">
+        <span class="blob" style="background:var(--coral)"></span>
+        <span class="tag">📸</span>
+        <div>
+          <div class="big">Grab your<br />brag cards</div>
+          <p>Screenshot-ready. Square &amp; story.</p>
+        </div>
+        <span class="go">Get cards →</span>
+      </a>
+    </div>
+
+    <div style="margin-top:42px; display:flex; justify-content:center;">
+      <div class="yearsel" role="group" aria-label="Choose year">
+        <a href="?year=all" {{if eq .SelectedYear 0}}aria-pressed="true"{{end}}>All-time</a>
+        {{range .AvailableYears}}<a href="?year={{.}}" {{if eq $.SelectedYear .}}aria-pressed="true"{{end}}>{{.}}</a>{{end}}
+      </div>
+    </div>
+
+    <p style="margin-top:26px; opacity:.5; font-size:.85rem;">
+      {{if .LoggedIn}}Connected.{{else}}Not your account?{{end}} <a href="/auth" style="text-decoration:underline; font-weight:600;">{{if .LoggedIn}}Re-sync / manage{{else}}Connect Deliveroo{{end}}</a>
+    </p>
+  </div>
+</main>
+
+<script src="/static/js/wrapped.js"></script>
+</body>
+</html>

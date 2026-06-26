@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Your share cards · Deliveroo Wrapped</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/static/css/wrapped.css" />
+</head>
+<body>
+{{- $yq := "all"}}{{if ne .SelectedYear 0}}{{$yq = printf "%d" .SelectedYear}}{{end}}
+{{- $yearLabel := "All-time"}}{{if ne .SelectedYear 0}}{{$yearLabel = $yq}}{{end}}
+{{- $cur := .Stats.Currency}}
+{{- $mods := .Stats.TopModifiers}}
+{{- $name := .UserName}}{{if not $name}}{{$name = "Your"}}{{end}}
+
+<header class="topbar">
+  <a class="brand" href="/?year={{$yq}}"><span class="roo">🦘</span><span>Wrapped <small>Deliveroo</small></span></a>
+  <nav class="topnav" aria-label="Primary">
+    <a href="/?year={{$yq}}">Home</a>
+    <a href="/story?year={{$yq}}">Story</a>
+    <a href="/explore?year={{$yq}}">Explore</a>
+    <a href="/cards?year={{$yq}}" class="active">Share</a>
+  </nav>
+</header>
+
+<main class="cards-page">
+  <div class="cards-head">
+    <h1 class="display">Brag responsibly.</h1>
+    <p>Screenshot-ready cards built at real social sizes. Tap a format, grab your favourite.</p>
+    <div class="tabs" role="group" aria-label="Card format">
+      <button data-fmt="sq" aria-pressed="true">Square · 1080</button>
+      <button data-fmt="story9" aria-pressed="false">Story · 9:16</button>
+    </div>
+  </div>
+
+  <!-- SQUARE -->
+  <div class="card-grid" id="grid-sq">
+
+    <div class="card-shell">
+      <div class="share sq t-teal" id="sq-headline">
+        <div class="pad">
+          <div class="label">Deliveroo Wrapped · {{$yearLabel}}</div>
+          <div style="margin-top:auto">
+            <div class="huge">{{.Stats.TotalOrders}}</div>
+            <div class="mid" style="margin-top:10px">orders this year.</div>
+          </div>
+          <div style="font-size:40px;margin-top:24px;font-weight:700">{{formatMoney .Stats.TotalSpent $cur}} · {{.Stats.UniqueRestaurants}} kitchens</div>
+          <div class="wm"><span class="roo">🦘</span> {{$name}}'s year</div>
+        </div>
+      </div>
+      <button class="dl" data-dl="sq-headline">⬇ Download PNG</button>
+    </div>
+
+    {{if .TopRestaurant}}
+    <div class="card-shell">
+      <div class="share sq t-ink" id="sq-top">
+        <div class="pad">
+          <div class="label">Top kitchen</div>
+          <div style="margin-top:30px;font-size:120px;line-height:.85">{{.TopRestaurant.Name}}</div>
+          <div class="row" style="margin-top:auto"><span class="huge" style="font-size:150px">{{.TopRestaurant.OrderCount}}</span><span class="mid">orders</span></div>
+          <div style="font-size:40px;margin-top:14px;font-weight:700;color:var(--teal)">{{formatMoney .TopRestaurant.TotalSpent $cur}} well spent</div>
+          <div class="wm"><span class="roo">🦘</span> Wrapped {{$yearLabel}}</div>
+        </div>
+      </div>
+      <button class="dl" data-dl="sq-top">⬇ Download PNG</button>
+    </div>
+    {{end}}
+
+    <div class="card-shell">
+      <div class="share sq t-violet" id="sq-plus">
+        <div class="pad">
+          <div class="label">Plus · was it worth it?</div>
+          <div style="margin-top:auto"><span class="huge">{{formatFloat .Stats.PlusROI 1}}</span><span class="mid" style="font-size:120px">×</span></div>
+          <div class="mid" style="margin-top:8px">return on Plus.</div>
+          <div style="font-size:42px;margin-top:20px;font-weight:700">Saved {{formatMoney .Stats.TotalPlusSavings $cur}} · net {{if ge .Stats.PlusNetBenefit 0.0}}+{{end}}{{formatMoney .Stats.PlusNetBenefit $cur}}</div>
+          <div class="wm"><span class="roo">🦘</span> {{if .PlusTier}}{{.PlusTier}} member{{else}}Plus member{{end}}</div>
+        </div>
+      </div>
+      <button class="dl" data-dl="sq-plus">⬇ Download PNG</button>
+    </div>
+
+    {{if $mods}}
+    <div class="card-shell">
+      <div class="share sq t-coral" id="sq-spicy">
+        <div class="pad">
+          <div class="label">Signature move</div>
+          <div class="huge" style="margin-top:auto;font-size:150px">{{(index $mods 0).Name}}</div>
+          <div class="mid" style="margin-top:16px">×{{(index $mods 0).Count}} 🌶️</div>
+          <div class="wm"><span class="roo">🦘</span> {{$name}}'s Wrapped</div>
+        </div>
+      </div>
+      <button class="dl" data-dl="sq-spicy">⬇ Download PNG</button>
+    </div>
+    {{end}}
+
+  </div>
+
+  <!-- STORY 9:16 -->
+  <div class="card-grid" id="grid-story9" style="display:none">
+
+    <div class="card-shell">
+      <div class="share story9 t-teal" id="st-headline">
+        <div class="pad">
+          <div class="label">Deliveroo Wrapped · {{$yearLabel}}</div>
+          <div style="margin-top:120px">
+            <div class="huge">{{.Stats.TotalOrders}}</div>
+            <div class="mid" style="margin-top:20px">orders.<br />{{formatMoney .Stats.TotalSpent $cur}}.<br />{{.Stats.UniqueRestaurants}} kitchens.</div>
+          </div>
+          <div style="font-size:46px;margin-top:40px;font-weight:700">A genuinely indulgent year, and we're not sorry.</div>
+          <div class="wm"><span class="roo">🦘</span> {{$name}}'s year in takeaways</div>
+        </div>
+      </div>
+      <button class="dl" data-dl="st-headline">⬇ Download PNG</button>
+    </div>
+
+    <div class="card-shell">
+      <div class="share story9 t-ink" id="st-recap">
+        <div class="pad">
+          <div class="label">The receipts</div>
+          <div style="margin-top:90px;display:flex;flex-direction:column;gap:54px">
+            <div><div style="font-size:120px;line-height:.8;color:var(--teal)">{{.Stats.TotalOrders}}</div><div style="font-size:40px;font-weight:700;opacity:.7">orders</div></div>
+            <div><div style="font-size:120px;line-height:.8;color:#FFB400">{{formatMoney .Stats.TotalSpent $cur}}</div><div style="font-size:40px;font-weight:700;opacity:.7">spent</div></div>
+            <div><div style="font-size:120px;line-height:.8;color:#FF5E5B">{{formatMoney .Stats.TotalTips $cur}}</div><div style="font-size:40px;font-weight:700;opacity:.7">tipped · generous</div></div>
+          </div>
+          <div class="wm"><span class="roo">🦘</span> Wrapped {{$yearLabel}}</div>
+        </div>
+      </div>
+      <button class="dl" data-dl="st-recap">⬇ Download PNG</button>
+    </div>
+
+    <div class="card-shell">
+      <div class="share story9 t-amber" id="st-habit">
+        <div class="pad">
+          <div class="label">Creature of habit</div>
+          <div style="margin-top:140px"><div class="huge">{{printf "%02d:00" .Stats.PeakHour}}</div><div class="mid" style="margin-top:20px">is my power hour.</div></div>
+          <div style="font-size:46px;margin-top:40px;font-weight:700">Certified brunch orderer. Split almost evenly between the office and home.</div>
+          <div class="wm"><span class="roo">🦘</span> {{$name}}'s Wrapped</div>
+        </div>
+      </div>
+      <button class="dl" data-dl="st-habit">⬇ Download PNG</button>
+    </div>
+
+  </div>
+</main>
+
+<script src="/static/js/wrapped.js"></script>
+<script>
+(function () {
+  var tabs = document.querySelectorAll(".tabs button");
+  tabs.forEach(function (t) {
+    t.addEventListener("click", function () {
+      tabs.forEach(function (x) { x.setAttribute("aria-pressed", String(x === t)); });
+      document.getElementById("grid-sq").style.display = t.dataset.fmt === "sq" ? "flex" : "none";
+      document.getElementById("grid-story9").style.display = t.dataset.fmt === "story9" ? "flex" : "none";
+    });
+  });
+})();
+</script>
+</body>
+</html>

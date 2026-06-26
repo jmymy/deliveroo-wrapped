@@ -246,6 +246,7 @@ func Calculate(orders []models.StoredOrder, year int, plusMonthlyCost float64) *
 
 	// Leaderboards
 	st.TopRestaurants, st.UniqueRestaurants = CalculateRestaurantStats(orders, year)
+	st.TopAddresses = CalculateAddressStats(orders, year)
 	st.DriverDataAvailable, st.UniqueDrivers, st.RepeatDriverOrders, st.TopDriver = CalculateDriverStats(orders, year)
 	st.TopDishes = topDishes(dishAgg, 10)
 
@@ -302,6 +303,61 @@ func CalculateRestaurantStats(orders []models.StoredOrder, year int) ([]models.R
 		list = list[:10]
 	}
 	return list, unique
+}
+
+// CalculateAddressStats aggregates orders by delivery-address label, with the
+// centroid of each label's coordinates, sorted by count (top 5). Drives the
+// dest-split bars and the delivery heatmap.
+func CalculateAddressStats(orders []models.StoredOrder, year int) []models.AddressEntry {
+	type acc struct {
+		count          int
+		latSum, lngSum float64
+		coordN         int
+	}
+	agg := make(map[string]*acc)
+	for _, o := range orders {
+		if year != 0 && o.PlacedAt.Year() != year {
+			continue
+		}
+		if o.PlacedAt.IsZero() || o.Status == "CANCELED" || o.DeliveryAddressLabel == "" {
+			continue
+		}
+		a := agg[o.DeliveryAddressLabel]
+		if a == nil {
+			a = &acc{}
+			agg[o.DeliveryAddressLabel] = a
+		}
+		a.count++
+		if o.DeliveryLat != 0 || o.DeliveryLng != 0 {
+			a.latSum += o.DeliveryLat
+			a.lngSum += o.DeliveryLng
+			a.coordN++
+		}
+	}
+
+	list := make([]models.AddressEntry, 0, len(agg))
+	for name, a := range agg {
+		e := models.AddressEntry{Name: name, Count: a.count}
+		if a.coordN > 0 {
+			e.Lat = a.latSum / float64(a.coordN)
+			e.Lng = a.lngSum / float64(a.coordN)
+		}
+		list = append(list, e)
+	}
+	sort.Slice(list, func(i, j int) bool { return list[i].Count > list[j].Count })
+	if len(list) > 5 {
+		list = list[:5]
+	}
+	total := 0
+	for _, e := range list {
+		total += e.Count
+	}
+	if total > 0 {
+		for i := range list {
+			list[i].Pct = int(float64(list[i].Count)/float64(total)*100 + 0.5)
+		}
+	}
+	return list
 }
 
 // CalculateDriverStats detects repeat drivers (the "same driver again?" stat).

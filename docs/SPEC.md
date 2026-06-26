@@ -124,6 +124,18 @@ internal/stats     Calculate() + restaurant/driver leaderboards + streaks
   not on Deliveroo's payload, so only the API types + adapter change post-capture.
 - Year filtering via `?year=YYYY` / `?year=all` throughout.
 
+## Kinetic redesign (Direction A)
+The whole UI is a Spotify-Wrapped-grade "Kinetic" redesign (from a Claude Design
+handoff): hub (`/`), a 9-scene scroll **story** (`/story`, count-ups + confetti),
+the **explore** dashboard (`/explore`, Chart.js bar + radar, Leaflet delivery
+heatmap, leaderboards, YoY delta chips, records), and **share cards** (`/cards`,
+square 1080² + story 9:16). Year via `?year=`. Design system in
+`static/css/wrapped.css` + `static/js/wrapped.js`; fonts Bricolage/Hanken;
+`prefers-reduced-motion` honored. Backend additions for it: `Stats.TopAddresses`
+(delivery-address aggregate w/ centroid coords + pct), `DataStore.MemberSince`,
+and funcMap helpers (`monogram`/`restColor`/`dayMonth`/`divf`). Only Direction A
+was delivered; an editorial Direction B could be added later.
+
 ## Shipped beyond the original asks
 From a deeper pass over the order payloads (no extra API calls): **Deliveroo
 beat-its-ETA %** (delivered vs estimated), **home-vs-office split**

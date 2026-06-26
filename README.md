@@ -1,11 +1,25 @@
 # Deliveroo Wrapped
 
-Your personal year-in-review for Deliveroo orders — a Spotify Wrapped-style
-dashboard of spend, fees, Plus savings, delivery times, top restaurants, tips,
-cuisines and more. Local-only; nothing leaves your machine.
+Your personal year-in-review for Deliveroo orders — a Spotify-Wrapped-style
+experience: a hub, a kinetic 9-scene scroll **story**, an **explore** dashboard
+(spend, Plus savings + ROI, delivery times, top restaurants, a delivery heatmap,
+customisations, records), and screenshot-ready **share cards**. Local-only;
+nothing leaves your machine.
 
 Ported from [`lime-wrapped`](../lime-wrapped). See [`docs/SPEC.md`](docs/SPEC.md)
 for the full product spec.
+
+## Pages
+
+| Route | What |
+|-------|------|
+| `/` | Hub — greeting + three entry points + year selector |
+| `/story` | The kinetic 9-scene Wrapped story (count-ups, confetti) |
+| `/explore` | Full dashboard — charts, heatmap, leaderboards, records, YoY deltas |
+| `/cards` | Shareable cards (square 1080² + story 9:16) |
+| `/auth` | Connect (paste a captured request) · `/share` → `/cards` |
+
+Pick a year with `?year=YYYY` / `?year=all`.
 
 ## Quick start
 

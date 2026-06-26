@@ -35,7 +35,14 @@ func seedOrders() []models.StoredOrder {
 		{"drv_002", "Aisha"},
 		{"", ""}, // some orders have no driver identity
 	}
-	home := struct{ lat, lng float64 }{51.4670, -0.1090}
+	// Two delivery destinations so the dest-split + heatmap have something to show.
+	dests := []struct {
+		label    string
+		lat, lng float64
+	}{
+		{"Home", 51.4670, -0.1090},
+		{"Office", 51.5155, -0.0890},
+	}
 
 	dishes := map[string][]struct {
 		name  string
@@ -91,6 +98,7 @@ func seedOrders() []models.StoredOrder {
 
 		deliveryMin := 22 + (i*7)%40 // 22..61 min
 		delivered := placed.Add(time.Duration(deliveryMin) * time.Minute)
+		dest := dests[i%2] // alternate Home / Office (slightly weighted by the cluster days)
 
 		orders = append(orders, models.StoredOrder{
 			ID:                   fmt.Sprintf("seed_%02d", i),
@@ -110,8 +118,9 @@ func seedOrders() []models.StoredOrder {
 			PlusServiceFeeSaved:  round2(serviceFee * 0.5),
 			RestaurantLat:        rs.lat,
 			RestaurantLng:        rs.lng,
-			DeliveryLat:          home.lat,
-			DeliveryLng:          home.lng,
+			DeliveryLat:          dest.lat,
+			DeliveryLng:          dest.lng,
+			DeliveryAddressLabel: dest.label,
 			DriverName:           dr.name,
 			DriverID:             dr.id,
 			Items:                items,
