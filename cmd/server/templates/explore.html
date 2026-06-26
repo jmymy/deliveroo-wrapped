@@ -316,7 +316,7 @@ const ROO = {{ .ViewModel | json }};
     infl.forEach(function (d, i) { if (d.order_count > infl[selIdx].order_count) selIdx = i; });
     if (board) {
       board.innerHTML = infl.map(function (d, i) {
-        var stable = Math.abs(d.pct_change) < 2;
+        var stable = Math.abs(d.pct_change) <= 2;
         var up = d.pct_change >= 0;
         var color = stable ? "#9aa7ad" : (up ? "#FF5E5B" : "#00A99D");
         var label = stable ? "≈ same" : ((up ? "+" : "") + Math.round(d.pct_change) + "%");
