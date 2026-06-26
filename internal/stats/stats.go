@@ -345,12 +345,14 @@ func CalculateAddressStats(orders []models.StoredOrder, year int) []models.Addre
 		list = append(list, e)
 	}
 	sort.Slice(list, func(i, j int) bool { return list[i].Count > list[j].Count })
-	if len(list) > 5 {
-		list = list[:5]
-	}
+	// Percentage denominator is ALL labelled orders, computed before truncating to
+	// the top 5 (otherwise "% of orders" overstates when there are >5 addresses).
 	total := 0
 	for _, e := range list {
 		total += e.Count
+	}
+	if len(list) > 5 {
+		list = list[:5]
 	}
 	if total > 0 {
 		for i := range list {

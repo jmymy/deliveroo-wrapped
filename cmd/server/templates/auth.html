@@ -64,6 +64,25 @@
     </form>
     <div id="auth-result"></div>
   </div>
+
+  {{if .Auth.LoggedIn}}
+  <div class="panel" style="margin-top:24px">
+    <p class="eyebrow" style="margin-bottom:10px">Pull data</p>
+    <h2 class="display" style="font-size:1.6rem">Sync &amp; enrich.</h2>
+    <p style="opacity:.7;margin:8px 0 6px">
+      <strong>Sync</strong> pulls your order history (fast). <strong>Enrich</strong> fills exact
+      service fees + restaurant coordinates from the per-order detail endpoint — it's
+      bot-protected, so it runs in small, slow, capped sessions and stops cleanly if blocked.
+    </p>
+    <p class="hint" style="margin-bottom:16px">Run <strong>Dry-run</strong> first (one order) to confirm the iOS fingerprint is accepted before any batch.</p>
+    <div style="display:flex; gap:10px; flex-wrap:wrap">
+      <button class="btn-primary" hx-post="/api/sync" hx-target="#pull-status" hx-swap="innerHTML">Sync orders</button>
+      <button class="btn-primary" style="background:var(--ink);color:#fff" hx-post="/api/enrich?dry=1" hx-target="#pull-status" hx-swap="innerHTML">Dry-run (1 order)</button>
+      <button class="btn-primary" style="background:var(--violet);color:#fff" hx-post="/api/enrich" hx-target="#pull-status" hx-swap="innerHTML">Enrich a batch</button>
+    </div>
+    <div id="pull-status" style="margin-top:16px"></div>
+  </div>
+  {{end}}
 </main>
 
 <script src="/static/js/wrapped.js"></script>

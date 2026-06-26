@@ -105,11 +105,11 @@ func main() {
 	}
 
 	client := deliveroo.NewClient()
+	if auth.Host != "" {
+		client.SetHost(auth.Host) // before SetAuth so cookies seed under the right host
+	}
 	if auth.Token != "" {
 		client.SetAuth(auth.Token, auth.Headers)
-	}
-	if auth.Host != "" {
-		client.SetHost(auth.Host)
 	}
 
 	logoDir := filepath.Join(dataDir, "logos")
@@ -133,7 +133,11 @@ func main() {
 	mux.HandleFunc("/explore", server.handleExplore)
 	mux.HandleFunc("/cards", server.handleCards)
 	mux.HandleFunc("/share", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/cards", http.StatusMovedPermanently)
+		target := "/cards"
+		if r.URL.RawQuery != "" {
+			target += "?" + r.URL.RawQuery
+		}
+		http.Redirect(w, r, target, http.StatusMovedPermanently)
 	})
 	mux.HandleFunc("/auth", server.handleAuth)
 	mux.HandleFunc("/api/manual-auth", server.handleManualAuth)
@@ -195,23 +199,40 @@ func importOrdersFile(store *storage.Storage, data *models.DataStore, path strin
 }
 
 // deriveHost extracts scheme://host from a captured request URL, falling back to
-// the captured "Host" header. Returns "" if neither is present.
+// the captured "Host" header. Returns "" unless it's an https Deliveroo host —
+// the token is sent to this host, so it must never be an arbitrary pasted host.
 func deriveHost(rawURL string, headers map[string]string) string {
+	host := ""
 	if rawURL != "" {
 		if u, err := url.Parse(rawURL); err == nil && u.Host != "" {
 			scheme := u.Scheme
 			if scheme == "" {
 				scheme = "https"
 			}
-			return scheme + "://" + u.Host
+			host = scheme + "://" + u.Host
 		}
 	}
-	for k, v := range headers {
-		if strings.EqualFold(k, "Host") && v != "" {
-			return "https://" + v
+	if host == "" {
+		for k, v := range headers {
+			if strings.EqualFold(k, "Host") && v != "" {
+				host = "https://" + v
+				break
+			}
+		}
+	}
+	if host != "" {
+		if u, err := url.Parse(host); err == nil && u.Scheme == "https" && isDeliverooHost(u.Hostname()) {
+			return host
 		}
 	}
 	return ""
+}
+
+// isDeliverooHost allowlists the API host so a pasted credential can't be sent
+// anywhere else.
+func isDeliverooHost(h string) bool {
+	h = strings.ToLower(h)
+	return h == "deliveroo.com" || strings.HasSuffix(h, ".deliveroo.com")
 }
 
 func plusMonthlyFromEnv() float64 {
@@ -555,8 +576,8 @@ func (s *Server) handleManualAuth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	host := deriveHost(parsed.URL, headers)
+	s.client.SetHost(host) // before SetAuth so cookies seed under the right host
 	s.client.SetAuth(token, headers)
-	s.client.SetHost(host)
 
 	s.mu.Lock()
 	s.auth.Token = token
@@ -644,26 +665,45 @@ func (s *Server) handleEnrich(w http.ResponseWriter, r *http.Request) {
 	s.syncTotal = 0
 	s.mu.Unlock()
 
-	go s.performEnrich()
+	dry := r.URL.Query().Get("dry") == "1"
+	go s.performEnrich(dry)
 
 	s.renderTemplate(w, "sync-status.html", map[string]interface{}{
 		"Status": "Starting enrichment...", "Progress": 0, "Total": 0, "ProgressPct": 0.0, "InProgress": true,
 	})
 }
 
-func (s *Server) performEnrich() {
+func (s *Server) performEnrich(dry bool) {
 	defer func() {
 		s.mu.Lock()
 		s.syncInProgress = false
 		s.mu.Unlock()
 	}()
-	s.runEnrichment()
+	s.runEnrichment(dry)
+}
+
+const defaultEnrichBatch = 30
+
+func enrichBatchSize() int {
+	if v := os.Getenv("DELIVEROO_ENRICH_BATCH"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return defaultEnrichBatch
 }
 
 // runEnrichment fills service fee + restaurant coords for delivered, not-yet-
-// enriched orders (one detail call each). Resumable; stops cleanly on auth
-// error so a fresh token can resume it.
-func (s *Server) runEnrichment() {
+// enriched orders via the per-order detail endpoint. It is deliberately
+// MAX-STEALTH: enrichment-paced (6-20s jitter), capped per session, and it
+// STOPS-AND-RESUMES on any block (401/403/429/Cloudflare challenge) — never
+// hammers. dry=true does exactly one order as a fingerprint-proof.
+func (s *Server) runEnrichment(dry bool) {
+	// Slow, human-like pacing for the bot-protected detail endpoint; restore the
+	// snappy default afterwards (list sync uses it).
+	s.client.SetThrottling(6*time.Second, 20*time.Second)
+	defer s.client.ResetThrottling()
+
 	s.mu.RLock()
 	var ids []string
 	for _, o := range s.data.Orders {
@@ -671,24 +711,33 @@ func (s *Server) runEnrichment() {
 			ids = append(ids, o.ID)
 		}
 	}
+	remaining := len(ids)
 	s.mu.RUnlock()
 
-	total := len(ids)
-	if total == 0 {
+	if remaining == 0 {
 		s.updateSyncStatus("Nothing to enrich — all delivered orders already have fee details.", 0, 0)
 		return
 	}
 
+	batch := enrichBatchSize()
+	if dry {
+		batch = 1
+	}
+	if batch > remaining {
+		batch = remaining
+	}
+
 	done := 0
-	for i, id := range ids {
-		s.updateSyncStatus(fmt.Sprintf("Enriching fees %d/%d...", i+1, total), i+1, total)
+	for i := 0; i < batch; i++ {
+		id := ids[i]
+		s.updateSyncStatus(fmt.Sprintf("Enriching %d/%d this session (%d total left)...", i+1, batch, remaining), i+1, batch)
 		d, err := s.client.GetOrderDetails(id)
 		if err != nil {
-			if isAuthError(err) {
+			if isBlocked(err) {
 				s.mu.Lock()
 				s.save()
 				s.mu.Unlock()
-				s.updateSyncStatus(fmt.Sprintf("Token expired after %d/%d. Re-paste a fresh token at /auth, then click Enrich to resume.", done, total), done, total)
+				s.updateSyncStatus(fmt.Sprintf("Stopped — looks blocked after %d (%s). Wait a while and retry later; do NOT hammer.", done, shortErr(err)), done, batch)
 				return
 			}
 			log.Printf("enrich %s failed: %v", id, err)
@@ -698,21 +747,63 @@ func (s *Server) runEnrichment() {
 		if s.store.EnrichOrderFromDetail(s.data, id, d) {
 			done++
 		}
-		if (i+1)%25 == 0 {
+		if (i+1)%10 == 0 {
 			s.save()
 		}
 		s.mu.Unlock()
+
+		if dry {
+			s.mu.Lock()
+			s.save()
+			var so *models.StoredOrder
+			for j := range s.data.Orders {
+				if s.data.Orders[j].ID == id {
+					so = &s.data.Orders[j]
+					break
+				}
+			}
+			s.mu.Unlock()
+			msg := "Dry-run OK ✓ — fetched + parsed one order. Fingerprint works; safe to run a batch."
+			if so != nil {
+				msg = fmt.Sprintf("Dry-run OK ✓ order %s: service fee £%.2f, restaurant %.4f,%.4f. Fingerprint works — safe to run a batch.", id, so.ServiceFee, so.RestaurantLat, so.RestaurantLng)
+			}
+			s.updateSyncStatus(msg, 1, 1)
+			return
+		}
 	}
 
 	s.mu.Lock()
 	s.save()
 	s.mu.Unlock()
-	s.updateSyncStatus(fmt.Sprintf("Enrichment complete! Filled fees for %d orders.", done), total, total)
+	left := remaining - done
+	if left > 0 {
+		s.updateSyncStatus(fmt.Sprintf("Session done: enriched %d, %d left. Wait a bit, then click Enrich to continue.", done, left), batch, batch)
+	} else {
+		s.updateSyncStatus(fmt.Sprintf("Enrichment complete! All %d delivered orders enriched.", done), batch, batch)
+	}
 }
 
-func isAuthError(err error) bool {
+// isBlocked reports an auth/rate/bot block (stop and resume later, never retry).
+func isBlocked(err error) bool {
+	m := strings.ToLower(err.Error())
+	for _, sig := range []string{
+		"status 401", "status 403", "status 429",
+		"just a moment", "cf-mitigated", "attention required",
+		"<!doctype html", "cf-chl", "challenge-platform", "cloudflare",
+	} {
+		if strings.Contains(m, sig) {
+			return true
+		}
+	}
+	return false
+}
+
+func shortErr(err error) string {
 	m := err.Error()
-	return strings.Contains(m, "status 401") || strings.Contains(m, "status 403")
+	if len(m) > 120 {
+		return m[:120]
+	}
+	return m
 }
 
 func (s *Server) handleSyncStatus(w http.ResponseWriter, r *http.Request) {
@@ -784,11 +875,11 @@ func (s *Server) performSync() {
 	s.save()
 	s.mu.Unlock()
 
-	// Always enrich after listing, so service fees + the restaurant map stay
-	// populated. Only un-enriched orders are fetched, so this is a one-time
-	// backfill then a couple of calls per new order on later syncs.
-	log.Printf("Imported %d new orders; enriching...", added)
-	s.runEnrichment()
+	// Detail enrichment (service fees + restaurant coords) is NOT auto-run after a
+	// list sync: it hits a bot-protected endpoint and must be paced/capped. It's a
+	// deliberate, capped, resumable action via the Enrich button. See runEnrichment.
+	log.Printf("Imported %d new orders.", added)
+	s.updateSyncStatus(fmt.Sprintf("Sync complete — imported %d new orders.", added), total, total)
 }
 
 func (s *Server) updateSyncStatus(status string, progress, total int) {

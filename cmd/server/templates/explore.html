@@ -181,6 +181,11 @@ const ROO = {{ .ViewModel | json }};
 (function () {
   var REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   var GRID = "rgba(26,46,53,.08)";
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
   Chart.defaults.font.family = "Hanken Grotesk, sans-serif";
   Chart.defaults.color = "rgba(26,46,53,.6)";
   var MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -213,7 +218,7 @@ const ROO = {{ .ViewModel | json }};
       dst.forEach(function (d) {
         var n = Math.max(1, Math.round(d.count / 4));
         for (var i = 0; i < n; i++) pts.push([d.lat + (Math.random() - .5) * .006, d.lng + (Math.random() - .5) * .006, .6 + Math.random() * .4]);
-        L.circleMarker([d.lat, d.lng], { radius: 7, color: "#00A99D", fillColor: "#00CCBC", fillOpacity: 1, weight: 2 }).addTo(map).bindPopup("<b>" + d.name + "</b><br>" + d.count + " orders");
+        L.circleMarker([d.lat, d.lng], { radius: 7, color: "#00A99D", fillColor: "#00CCBC", fillOpacity: 1, weight: 2 }).addTo(map).bindPopup("<b>" + esc(d.name) + "</b><br>" + d.count + " orders");
       });
       L.heatLayer(pts, { radius: 30, blur: 22, max: 1, gradient: { .3: "#7B61FF", .6: "#00CCBC", 1: "#FF5E5B" } }).addTo(map);
       setTimeout(function () { map.invalidateSize(); }, 300);

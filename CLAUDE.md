@@ -45,8 +45,14 @@ Fonts). Charts via Chart.js, map/heatmap via Leaflet + leaflet.heat (CDN + SRI).
 - `cmd/server/seed.go` — synthetic dev data behind `DELIVEROO_SEED=1` (two
   delivery addresses so the dest-split + heatmap render).
 - `internal/deliveroo` — `client.go` (throttled token-replay API client; replays
-  the captured iOS-app header block verbatim via `setIOSAppHeaders`) and
-  `curl.go` (parses a "Copy as cURL" paste into token + headers).
+  the captured iOS-app header block), `curl.go` (parses a "Copy as cURL" paste),
+  and `transport.go` (the iOS-fingerprinted HTTP client via `bogdanfinn/tls-client`
+  — JA3/JA4 + HTTP/2 + header order matching an iPhone; used for all API calls so
+  the bot-protected detail-endpoint pull isn't flagged as Go). `fingerprint_test.go`
+  is a gated (`DELIVEROO_FP_TEST=1`) echo check. Enrichment env: `DELIVEROO_TLS_PROFILE`
+  (ios18|ios26|ios17), `DELIVEROO_ENRICH_BATCH` (per-session cap, default 30).
+  Enrichment is manual/capped/block-safe (see `runEnrichment`); Sync/Dry-run/Enrich
+  buttons live on `/auth`.
 - `internal/models` — Deliveroo API response types (**`TODO(phase0)`**: align
   with real captured payloads) and our own flattened `StoredOrder` + `YearlyStats`.
 - `internal/storage` — JSON persistence to `~/.deliveroostats/` and the

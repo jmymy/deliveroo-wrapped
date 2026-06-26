@@ -103,7 +103,7 @@
       <h2 class="kinetic-mid reveal d1">Food showed up in<br /><span class="num" data-count="{{printf "%.0f" .Stats.AvgDeliveryMinutes}}">0</span> minutes flat.</h2>
       <p class="lede reveal d2" style="margin-top:18px">
         We beat our own ETA <b class="num" data-count="{{printf "%.0f" .Stats.EtaBeatenPct}}" data-suffix="%">0%</b> of the time —
-        about <b>{{formatFloat (absf .Stats.AvgVsEtaMinutes) 0}} min</b> early on average.
+        about <b>{{formatFloat (absf .Stats.AvgVsEtaMinutes) 0}} min</b> {{if gt .Stats.AvgVsEtaMinutes 0.0}}late{{else}}early{{end}} on average.
       </p>
       <div class="chip-row reveal d3" style="margin-top:24px">
         <span class="chip" style="background:rgba(255,255,255,.18);color:#fff">⚡ Fastest <b style="color:#fff">{{printf "%.0f" .Stats.ShortestDeliveryMinutes}} min</b> · {{.Stats.ShortestDeliveryRestaurant}}</span>
