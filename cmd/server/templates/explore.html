@@ -180,6 +180,16 @@
     </article>
     {{end}}
 
+    <article class="card col-8">
+      <h3>Order-value spread</h3><div class="sub">How big your orders run, in {{$cur}}</div>
+      <div class="chartbox"><canvas id="chart-values"></canvas></div>
+    </article>
+
+    <article class="card col-4">
+      <h3>Longest streak</h3><div class="sub">Consecutive days with an order</div>
+      <div class="kpi" style="margin-top:6px"><span class="v num" data-count="{{.Stats.LongestStreak}}" data-suffix=" days">{{.Stats.LongestStreak}} days</span><span class="l">in a row{{if gt .Stats.LongestStreak 1}} from {{formatDate .Stats.LongestStreakStart}}{{end}}</span></div>
+    </article>
+
     <article class="card col-12" style="background:linear-gradient(120deg,#FFB40022,#7B61FF18)">
       <h3>Records of the year</h3><div class="sub">Personal bests (and one personal worst)</div>
       <div class="grid" style="margin-top:8px;gap:14px">
@@ -243,6 +253,15 @@ const ROO = {{ .ViewModel | json }};
     options: { responsive: true, maintainAspectRatio: false, animation: REDUCED ? false : { duration: 900 },
       plugins: { legend: { display: false }, tooltip: { callbacks: { title: function (c) { return c[0].label + ":00"; }, label: function (c) { return c.raw + (c.raw === 1 ? " order" : " orders"); } } } },
       scales: { x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: false, callback: function (v, i) { return i % 3 === 0 ? HOURS[i] : ""; } } }, y: { beginAtZero: true, grid: { color: GRID }, ticks: { precision: 0 } } } }
+  });
+
+  var vbuckets = ROO.valueBuckets || [];
+  new Chart(document.getElementById("chart-values"), {
+    type: "bar",
+    data: { labels: vbuckets.map(function (b) { return b.label; }), datasets: [{ data: vbuckets.map(function (b) { return b.count; }), backgroundColor: "#FF5E5B", borderRadius: 6, maxBarThickness: 46 }] },
+    options: { responsive: true, maintainAspectRatio: false, animation: REDUCED ? false : { duration: 900 },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { title: function (c) { return c[0].label; }, label: function (c) { return c.raw + (c.raw === 1 ? " order" : " orders"); } } } },
+      scales: { x: { grid: { display: false } }, y: { beginAtZero: true, grid: { color: GRID }, ticks: { precision: 0 } } } }
   });
 
   if (window.L) {

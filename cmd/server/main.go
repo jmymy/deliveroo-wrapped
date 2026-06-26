@@ -463,6 +463,7 @@ type viewModel struct {
 	SpendByMonth [12]float64           `json:"spendByMonth"`
 	OrdersByDow  [7]int                `json:"ordersByDow"`  // Mon..Sun
 	OrdersByHour [24]int               `json:"ordersByHour"` // 0..23
+	ValueBuckets []models.ValueBucket  `json:"valueBuckets"`
 	Destinations []models.AddressEntry `json:"destinations"`
 }
 
@@ -479,6 +480,7 @@ func buildViewModel(st *models.YearlyStats) viewModel {
 	for h := 0; h < 24; h++ {
 		vm.OrdersByHour[h] = st.OrdersByHour[h]
 	}
+	vm.ValueBuckets = st.OrderValueBuckets
 	vm.Destinations = st.TopAddresses
 	return vm
 }
